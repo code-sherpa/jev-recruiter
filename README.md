@@ -18,7 +18,7 @@ Open **http://127.0.0.1:8766**. Connect Browser Harness to Chrome and sign into 
 
 Jev is the only model used by the recruiting app. Navigation calls the original `model.choose` operation and target implementation. Qualification checks send criterion status and indexed evidence choices together to the same Jev API. Evidence quotes are resolved from observed excerpts in code. No generative helper or secondary model is called. Model requests contain your job brief and observed profile text.
 
-Browser control uses the upstream `browser-harness==0.1.13` dependency, including its CDP connection, observations, freshness checks, and scrolling. A selected observed profile link opens in an owned tab to preserve feed position. The original generic library remains in source for reference; its text helper is not exposed by the recruiting server. A clean upstream clone is available locally in `jev-ultrafast/` and is ignored by this repository.
+Browser control uses the upstream `browser-harness==0.1.13` dependency, including its CDP connection, observations, freshness checks, and scrolling. The recruiting viewport defaults to 2048 × 1280 so the right column remains visible; configure `RECRUITING_VIEWPORT_WIDTH` and `RECRUITING_VIEWPORT_HEIGHT` in `.env`. Observed scrolling supports both the document and visible scroll containers, including LinkedIn’s main feed panel. A selected observed profile link opens in an owned tab to preserve feed position. The original generic library remains in source for reference; its text helper is not exposed by the recruiting server. A clean upstream clone is available locally in `jev-ultrafast/` and is ignored by this repository.
 
 ## Workflow
 

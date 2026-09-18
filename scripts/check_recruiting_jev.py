@@ -48,11 +48,11 @@ def main():
     class FixtureBrowser(Browser):
         """Map only the synthetic test URLs to our local server; preserve real DOM guards."""
 
-        def __init__(self, url):
+        def __init__(self, url, **viewport):
             if url not in {recruiter.FEED_URL, PROFILE}:
                 raise ValueError("The fixture cannot visit other URLs")
             self.fixture_url = url
-            super().__init__(origin + ("/feed/" if url == recruiter.FEED_URL else "/profile/"))
+            super().__init__(origin + ("/feed/" if url == recruiter.FEED_URL else "/profile/"), **viewport)
 
         def observe(self, screenshot=True):
             state = super().observe(screenshot=screenshot)

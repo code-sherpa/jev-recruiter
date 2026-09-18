@@ -74,6 +74,12 @@ class Recruiter:
                 raise ValueError(f"{label} must be an integer from 1 to {limit}.")
         if not os.environ.get("TYPESAFE_API_KEY", "").strip():
             raise ValueError("Configure TYPESAFE_API_KEY before starting recruiting.")
+        self.viewport = {
+            "width": int(os.environ.get("RECRUITING_VIEWPORT_WIDTH", "2048")),
+            "height": int(os.environ.get("RECRUITING_VIEWPORT_HEIGHT", "1280")),
+        }
+        if not (800 <= self.viewport["width"] <= 3840 and 600 <= self.viewport["height"] <= 2160):
+            raise ValueError("Recruiting viewport must be 800 to 3840 pixels wide and 600 to 2160 pixels tall.")
         self.run_id = uuid4().hex
         self.requirements = requirements.strip()
         self.max_profiles, self.max_scrolls = max_profiles, max_scrolls
@@ -101,6 +107,7 @@ class Recruiter:
             "candidates": self.candidates, "history": self.history,
             "discoveries": self.discoveries,
             "decision": self.decision, "model": os.environ.get("TYPESAFE_MODEL", "jev-latest"),
+            "viewport": self.viewport,
             "limitations": "Only three visible profile screens are read. Collapsed sections are not expanded. "
                             "Nearby recommendations may appear in excerpts. Verify evidence belongs to the candidate. "
                             "Profile visits can be visible to their owners. All recommendations need human review.",
@@ -195,7 +202,7 @@ class Recruiter:
 
     def _tick(self):
         if self.feed is None:
-            self.feed = Browser(FEED_URL)
+            self.feed = Browser(FEED_URL, **self.viewport)
             self._log("Opened owned feed tab", url=FEED_URL)
             self._observe(self.feed)
             return
@@ -246,7 +253,7 @@ class Recruiter:
             self.current = next(c for c in self.queue if c["profile_url"] == url)
             self.queue.remove(self.current)
             # Consume only the selected observed link. Never let a model supply a URL.
-            self.profile = Browser(url)
+            self.profile = Browser(url, **self.viewport)
             self._log("Opened Jev selected profile in owned tab", profile_url=url)
             self.profile_scrolls = self.idle_steps = 0
         else:

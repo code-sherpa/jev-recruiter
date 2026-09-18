@@ -18,11 +18,11 @@ class StalePage(ValueError):
 
 
 class Browser:
-    def __init__(self, url):
+    def __init__(self, url, *, width=1120, height=780):
         ensure_daemon()
         self.target = cdp("Target.createTarget", url="about:blank", background=True)["targetId"]
         self.session = cdp("Target.attachToTarget", targetId=self.target, flatten=True)["sessionId"]
-        self.call("Emulation.setDeviceMetricsOverride", width=1120, height=780, deviceScaleFactor=1, mobile=False)
+        self.call("Emulation.setDeviceMetricsOverride", width=width, height=height, deviceScaleFactor=1, mobile=False)
         # Keep rAF/menus rendering in an owned background tab, without activating the user's Chrome tab.
         self.call("Emulation.setFocusEmulationEnabled", enabled=True)
         self.call("Page.navigate", url=url)
@@ -136,7 +136,20 @@ def browser_operation(request):
         action = request["action"]
         kind = action["kind"]
         if kind == "scroll":
-            call("Input.dispatchMouseEvent", type="mouseWheel", x=550, y=650, deltaX=0, deltaY=action["delta"])
+            if type(action.get("node")) is not int:
+                raise ValueError("Invalid observed scroll node")
+            target = evaluate("""(action => {
+              const cache=window.__jevFast;
+              const target=cache?.scrollTarget(cache.nodes.get(action.node));
+              if (!target || target.y!==action.y || target.height!==action.height ||
+                  target.viewport!==action.viewport) return null;
+              if (action.delta>0 ? target.y+target.viewport>=target.height-2 : target.y<=0) return null;
+              return {x:target.x,y:target.centerY};
+            })(""" + json.dumps(action) + ")")
+            if target is None:
+                raise StalePage("Scroll surface changed or is covered. Observe again.")
+            call("Input.dispatchMouseEvent", type="mouseWheel", x=target["x"], y=target["y"],
+                 deltaX=0, deltaY=action["delta"])
         elif kind != "wait":
             if type(action["node"]) is not int:
                 raise ValueError("Invalid observed node")

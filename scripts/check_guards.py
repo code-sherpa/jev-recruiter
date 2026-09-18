@@ -1,5 +1,6 @@
 """Local-browser freshness/execution regressions. No model calls or external websites."""
 
+import time
 from urllib.parse import quote
 
 from jev_ultrafast.browser import Browser, StalePage
@@ -124,6 +125,60 @@ def main():
         assert value == "Generated", repr(value)
         assert any(a.get("role") == "option" for a in page["actions"])
         passed.append("real text input waits for asynchronous combobox suggestions")
+
+        browser.call("Page.navigate", url="data:text/html," + quote("""<!doctype html>
+          <style>html,body{margin:0;height:100%;overflow:hidden}
+          main{position:fixed;top:52px;bottom:0;width:100%;overflow-y:auto}
+          section{height:500px}</style>
+          <header>Persistent header</header><main><section><button>First profile</button></section>
+          <section><button>Second profile</button></section>
+          <section><button>Third profile</button></section><section>End</section></main>
+        """))
+        page = browser.observe(screenshot=False)
+        down = next(a for a in page["actions"] if a["id"] == "scroll_down")
+        first = next(a for a in page["actions"] if a["label"] == "First profile")
+        assert browser.evaluate("document.documentElement.scrollHeight===innerHeight && scrollY===0")
+        assert browser.evaluate(f"window.__jevFast.nodes.get({down['node']}).tagName") == "MAIN"
+        assert not any(a.get("label") == "Third profile" for a in page["actions"])
+        browser.act(down, page)
+        # Wheel scrolling can complete asynchronously; wait only on observed state,
+        # never resend a mutation. No model call is involved in this regression.
+        deadline = time.monotonic() + 2
+        while browser.evaluate("document.querySelector('main').scrollTop") < 500:
+            assert time.monotonic() < deadline, "Observed container did not scroll"
+            time.sleep(0.02)
+        updated = browser.observe(screenshot=False)
+        assert browser.evaluate("scrollY") == 0
+        assert updated["scroll"]["y"] >= 500
+        assert any(a.get("label") == "Third profile" for a in updated["actions"])
+        assert not browser.fresh(page)
+        assert not browser.fresh(page, first)
+        passed.append("nested main scrolls through real wheel input and invalidates old guards")
+
+        up = next(a for a in updated["actions"] if a["id"] == "scroll_up")
+        browser.evaluate("const cover=document.createElement('div'); "
+                         "cover.style.cssText='position:fixed;inset:0;z-index:9999'; "
+                         "document.body.append(cover)")
+        try:
+            browser.act(up, updated)
+        except StalePage:
+            pass
+        else:
+            raise AssertionError("Covered scroll surface accepted wheel input")
+        passed.append("covered nested scroll surface rejected before input")
+
+        browser.call("Page.navigate", url="data:text/html," + quote("""<!doctype html>
+          <style>body{margin:0;height:2400px}</style><button>Window scroll</button>
+        """))
+        page = browser.observe(screenshot=False)
+        down = next(a for a in page["actions"] if a["id"] == "scroll_down")
+        browser.act(down, page)
+        deadline = time.monotonic() + 2
+        while browser.evaluate("scrollY") < 500:
+            assert time.monotonic() < deadline, "Document did not scroll"
+            time.sleep(0.02)
+        assert browser.observe(screenshot=False)["scroll"]["y"] >= 500
+        passed.append("ordinary document scrolling still uses real wheel input")
         browser.call("Page.navigate", url="about:blank")
         assert not browser.fresh(page, field)
         passed.append("navigation invalidates the old document")

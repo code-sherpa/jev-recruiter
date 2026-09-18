@@ -41,9 +41,43 @@
     }
     return null;
   };
+  const scrollable=e=>e.scrollHeight>e.clientHeight+2 &&
+    ['auto','scroll','overlay'].includes(getComputedStyle(e).overflowY);
+  // Wheel input belongs to an observed scroll surface, including app layouts whose
+  // document never scrolls. Clip its bounds to visible overflow ancestors.
+  cache.scrollTarget=e=>{
+    if (!e?.isConnected || !visible(e)) return null;
+    const root=e===document.scrollingElement;
+    if (!root && !scrollable(e)) return null;
+    const r=root ? {left:0,top:0,right:innerWidth,bottom:innerHeight} : e.getBoundingClientRect();
+    let left=Math.max(0,r.left),top=Math.max(0,r.top),right=Math.min(innerWidth,r.right),
+      bottom=Math.min(innerHeight,r.bottom);
+    for (let p=e.parentElement; !root && p; p=p.parentElement) {
+      const style=getComputedStyle(p), bounds=p.getBoundingClientRect();
+      if (['auto','scroll','hidden','clip'].includes(style.overflowX)) {
+        left=Math.max(left,bounds.left); right=Math.min(right,bounds.right);
+      }
+      if (['auto','scroll','hidden','clip'].includes(style.overflowY)) {
+        top=Math.max(top,bounds.top); bottom=Math.min(bottom,bounds.bottom);
+      }
+    }
+    if (right<=left || bottom<=top) return null;
+    const x=(left+right)/2,y=(top+bottom)/2,hit=document.elementFromPoint(x,y);
+    if (!hit || !e.contains(hit)) return null;
+    // A nested scroll surface at the wheel point would receive the input instead.
+    for (let p=hit;p && p!==e;p=p.parentElement) if (scrollable(p)) return null;
+    return {node:identity(e),y:root ? scrollY : e.scrollTop,height:e.scrollHeight,
+      viewport:root ? innerHeight : e.clientHeight,rect:{x:left,y:top,w:right-left,h:bottom-top},x,centerY:y};
+  };
+  const scrollAreas=[...document.querySelectorAll('*')]
+    .filter(e=>e!==document.scrollingElement && scrollable(e) && visible(e));
+  const surfaces=scrollAreas.map(e=>cache.scrollTarget(e)).filter(Boolean)
+    .sort((a,b)=>b.rect.w*b.rect.h-a.rect.w*a.rect.h);
+  const scroll=surfaces[0] || cache.scrollTarget(document.scrollingElement);
   cache.pageKey=()=>[performance.timeOrigin,location.href,scrollX,scrollY,innerWidth,innerHeight,
     [...document.querySelectorAll('input,textarea,select')].filter(safe)
-      .map(e=>[identity(e),e.value,e.checked,e.selectedIndex,e.disabled,e.readOnly])];
+      .map(e=>[identity(e),e.value,e.checked,e.selectedIndex,e.disabled,e.readOnly]),
+    scrollAreas.map(e=>[identity(e),e.isConnected,e.scrollLeft,e.scrollTop,e.scrollHeight,e.clientHeight])];
   cache.guard=e=>{
     if (!e?.isConnected || !visible(e)) return null;
     const scope=e.closest('form,dialog,[role="dialog"],article,li,tr,[role="row"]') || e.parentElement;
@@ -90,19 +124,22 @@
       words.push(value); length+=value.length;
     }
   }
-  const text=words.join('\n').slice(0,6000), height=document.documentElement.scrollHeight;
+  const text=words.join('\n').slice(0,6000);
   const page_key=cache.pageKey(), guards={};
   for (const a of actions) if (!(a.node in guards)) guards[a.node]=cache.guard(cache.nodes.get(a.node));
   // Compare meaning and identity. Geometry is always resolved and hit-tested just before input.
   const semantics=actions.map(({rect,...action})=>action);
   const marker=[performance.timeOrigin,location.href,scrollX,scrollY,innerWidth,innerHeight,
-    document.title,text,semantics,page_key[6]];
+    document.title,text,semantics,page_key[6],page_key[7]];
   const omitted_actions=Math.max(0,actions.length-250);
   actions.splice(250);
   actions.forEach((a,i)=>a.id='e'+(i+1));
-  if (scrollY+innerHeight<height-2) actions.push({id:'scroll_down',kind:'scroll',label:'Scroll down',delta:560});
-  if (scrollY>0) actions.push({id:'scroll_up',kind:'scroll',label:'Scroll up',delta:-560});
+  if (scroll && scroll.y+scroll.viewport<scroll.height-2)
+    actions.push({id:'scroll_down',kind:'scroll',label:'Scroll down',delta:560,...scroll});
+  if (scroll && scroll.y>0)
+    actions.push({id:'scroll_up',kind:'scroll',label:'Scroll up',delta:-560,...scroll});
   actions.push({id:'wait',kind:'wait',label:'Wait for the page to update'});
   return {url:location.href,title:document.title,w:innerWidth,h:innerHeight,text,
-    scroll:{y:scrollY,height},actions,marker,page_key,guards,omitted_actions};
+    scroll:scroll || {y:scrollY,height:document.documentElement.scrollHeight},
+    actions,marker,page_key,guards,omitted_actions};
 })()

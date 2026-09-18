@@ -53,8 +53,9 @@ def test_missing_key_does_not_open_browser(monkeypatch):
 class FakeBrowser:
     instances = []
 
-    def __init__(self, url):
+    def __init__(self, url, **viewport):
         self.url = url
+        self.viewport = viewport
         self.closed = False
         self.actions = []
         self.instances.append(self)
@@ -142,6 +143,7 @@ def test_full_bounded_run_and_human_review(prepared):
     assert state['candidates'][0]['assessment']['recommendation'] == 'potential_match'
     assert state['candidates'][0]['review'] == 'unreviewed'
     assert len(FakeBrowser.instances) == 2
+    assert all(b.viewport == {"width": 2048, "height": 1280} for b in FakeBrowser.instances)
     assert len(FakeBrowser.instances[1].actions) == 2
     assert FakeBrowser.instances[1].closed
     saved = run.path.read_text()
