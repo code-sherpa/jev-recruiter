@@ -9,7 +9,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 from uuid import uuid4
 
-from .browser import Browser
+from .browser import Browser, StalePage
 from .model import choose
 from .recruiting_model import assess, parse_criteria
 
@@ -187,6 +187,13 @@ class Recruiter:
             self.status = "running"
             try:
                 self._tick()
+            except StalePage:
+                # Like the upstream Agent, discard an unexecuted stale choice.
+                # The next tick observes again and asks Jev; no mutation is replayed.
+                self.status = "ready"
+                self.decision = None
+                self.message = "Page changed before input. Ready for a fresh Jev decision."
+                self._log("Discarded stale Jev decision before execution")
             except Exception as exc:
                 self.status = "blocked"
                 # Do not expose provider responses or credentials through persisted errors.
@@ -251,7 +258,7 @@ class Recruiter:
         action = next(a for a in actions if a["id"] == selected)
         if action["kind"] == "click":
             if not self.feed.fresh(page, action):
-                raise ValueError("The chosen profile changed before navigation. Start again from the current feed.")
+                raise StalePage("The chosen profile changed before navigation. Observe again.")
             url = profile_url(action["href"])
             self.current = next(c for c in self.queue if c["profile_url"] == url)
             self.queue.remove(self.current)

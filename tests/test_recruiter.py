@@ -210,10 +210,34 @@ def test_stale_profile_link_never_opens(prepared, monkeypatch):
     monkeypatch.setattr(FakeBrowser, 'fresh', lambda *args: False)
     prepared.command('tick')
     state = prepared.command('tick')
-    assert state['status'] == 'blocked'
-    assert 'changed before navigation' in state['error']
+    assert state['status'] == 'ready'
+    assert state['decision'] is None
+    assert 'fresh Jev decision' in state['message']
     assert len(FakeBrowser.instances) == 1
     assert state['discoveries'][0]['profile_url'] == 'https://www.linkedin.com/in/alice/'
+
+
+def test_stale_scroll_observes_and_asks_jev_again(prepared, monkeypatch):
+    prepared.command('tick')
+    prepared.command('tick')
+    original = FakeBrowser.act
+    calls = []
+
+    def changing_page(browser, action, page):
+        calls.append(action['id'])
+        if len(calls) == 1:
+            raise recruiter.StalePage('Changed before input')
+        return original(browser, action, page)
+
+    monkeypatch.setattr(FakeBrowser, 'act', changing_page)
+    state = prepared.command('tick')
+    assert state['status'] == 'ready'
+    assert not prepared.profile.actions
+    requests = state['counts']['model_calls']
+    state = prepared.command('tick')
+    assert state['counts']['model_calls'] == requests + 1
+    assert len(prepared.profile.actions) == 1
+    assert prepared.profile_scrolls == 1
 
 
 def test_jev_done_does_not_claim_coverage(prepared, monkeypatch):
