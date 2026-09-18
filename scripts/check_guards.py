@@ -179,6 +179,41 @@ def main():
             time.sleep(0.02)
         assert browser.observe(screenshot=False)["scroll"]["y"] >= 500
         passed.append("ordinary document scrolling still uses real wheel input")
+        browser.call("Page.navigate", url="data:text/html," + quote("""<!doctype html>
+          <style>body{margin:20px}main{width:550px}aside{position:absolute;left:650px;top:20px;width:300px}
+          .card{margin-bottom:15px}.photo{display:inline-block;width:24px;height:24px}
+          .clip{height:22px;overflow:hidden}.below{padding-top:50px}</style>
+          <main><article><div><a href="https://www.linkedin.com/in/founder/">Sam Founder</a>
+          <p>Founder and software engineer</p></div>
+          <p>We are hiring a field marketing manager in San Francisco.</p></article></main>
+          <aside><div class="card"><a class="photo" href="https://www.linkedin.com/in/marketer/"></a>
+          <div><a href="https://www.linkedin.com/in/marketer/?ref=sidebar">Alex Marketer</a>
+          <p>Field Marketing Manager at Example</p><span hidden>Software engineer</span></div></div>
+          <div class="card"><a href="https://www.linkedin.com/in/engineer/">Jo Engineer</a>
+          <p>Software Engineer</p></div><div class="clip">
+          <a href="https://www.linkedin.com/in/clipped/">Visible Name</a>
+          <p class="below">Invisible field marketing title</p>
+          <a href="https://www.linkedin.com/in/hidden/">Hidden profile</a></div></aside>
+        """))
+        page = browser.observe(screenshot=False)
+        links = [a for a in page["actions"] if a.get("href")]
+        marketer = [a for a in links if "/in/marketer/" in a["href"]]
+        assert len(marketer) == 2
+        assert all("Field Marketing Manager" in a["context"] for a in marketer)
+        assert all("Engineer" not in a["context"] for a in marketer)
+        assert all(a["region"] == "sidebar" for a in marketer)
+        assert all(a["label"] == "Alex Marketer" for a in marketer)
+        engineer = next(a for a in links if "/in/engineer/" in a["href"])
+        assert "Marketing" not in engineer["context"]
+        founder = next(a for a in links if "/in/founder/" in a["href"])
+        assert "Founder and software engineer" in founder["context"]
+        assert "hiring" not in founder["context"]
+        assert founder["region"] == "main"
+        clipped = next(a for a in links if "/in/clipped/" in a["href"])
+        assert "Invisible" not in clipped["context"]
+        assert "Invisible" not in page["text"]
+        assert not any("/in/hidden/" in a["href"] for a in links)
+        passed.append("profile card headlines stay with their person and exclude hidden and post text")
         browser.call("Page.navigate", url="about:blank")
         assert not browser.fresh(page, field)
         passed.append("navigation invalidates the old document")

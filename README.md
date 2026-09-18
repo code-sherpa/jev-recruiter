@@ -2,7 +2,7 @@
 
 A local LinkedIn sourcing workspace adapted from [Jev Ultrafast](https://github.com/browser-use/jev-ultrafast).
 
-Edit the San Francisco field marketer brief, open a session, and run discovery. The browser reads visible profile links in your LinkedIn feed, including posts and recommendations, then opens those observed profiles in a separate tab. Profile evidence is compared with your requirements. Review the evidence yourself and mark candidates as shortlisted or passed.
+Edit the San Francisco field marketer brief, open a session, and run discovery. The browser starts with a people search for field marketing in San Francisco. Jev screens each visible professional title before opening a relevant profile, then follows relevant recommendations in that profile’s right sidebar. Unrelated or unknown titles cannot be opened. Profile evidence is compared with your requirements. Review the evidence yourself and mark candidates as shortlisted or passed.
 
 ## Run locally
 
@@ -16,24 +16,24 @@ uv run jev
 
 Open **http://127.0.0.1:8766**. Connect Browser Harness to Chrome and sign into LinkedIn in that Chrome profile before starting. The app uses your existing browser session. It does not collect your LinkedIn password.
 
-Jev is the only model used by the recruiting app. Navigation calls the original `model.choose` operation and target implementation. Qualification checks send criterion status and indexed evidence choices together to the same Jev API. Evidence quotes are resolved from observed excerpts in code. No generative helper or secondary model is called. Model requests contain your job brief and observed profile text.
+Jev is the only model used by the recruiting app. Navigation calls the original `model.choose` operation and target implementation. Title screening and qualification checks send status and indexed evidence choices together to the same Jev API. Evidence quotes are resolved from observed excerpts in code. No generative helper or secondary model is called. Model requests contain your job brief and observed profile text.
 
-Browser control uses the upstream `browser-harness==0.1.13` dependency, including its CDP connection, observations, freshness checks, and scrolling. The recruiting viewport defaults to 2048 × 1280 so the right column remains visible; configure `RECRUITING_VIEWPORT_WIDTH` and `RECRUITING_VIEWPORT_HEIGHT` in `.env`. Observed scrolling supports both the document and visible scroll containers, including LinkedIn’s main feed panel. A selected observed profile link opens in an owned tab to preserve feed position. The original generic library remains in source for reference; its text helper is not exposed by the recruiting server. A clean upstream clone is available locally in `jev-ultrafast/` and is ignored by this repository.
+Browser control uses the upstream `browser-harness==0.1.13` dependency, including its CDP connection, observations, freshness checks, and scrolling. The recruiting viewport defaults to 2048 × 1280 so the right column remains visible; configure `RECRUITING_VIEWPORT_WIDTH` and `RECRUITING_VIEWPORT_HEIGHT` in `.env`. Observed scrolling supports both the document and visible scroll containers, including LinkedIn’s main feed panel. A selected observed profile link opens in an owned tab to preserve its source position. The original generic library remains in source for reference; its text helper is not exposed by the recruiting server. A clean upstream clone is available locally in `jev-ultrafast/` and is ignored by this repository.
 
 ## Workflow
 
-1. Edit the suggested field marketer requirements, one criterion per line (up to 20). Start optional criteria with `Preferred:`. Set the profile and feed scrolling limits.
+1. Edit the suggested field marketer requirements, one criterion per line (up to 20). Start optional criteria with `Preferred:`. Edit the starting search and set profile and discovery scrolling limits.
 2. Start a session, then use the step or automatic run controls to collect profiles and evidence. Pause takes effect after the current request.
 3. Review each criterion, its supporting quotation, and any missing information. The recommendation is an aid to your review, not a hiring decision.
 4. Shortlist or pass candidates yourself. Export the results as JSON.
 
-Only visible, observed LinkedIn profile URLs are visited. The recruiting flow performs navigation and scrolling. It does not send messages, connection requests, likes, or comments. Profile visits still follow your LinkedIn account visibility settings.
+Only visible, observed LinkedIn profile URLs that pass Jev’s title relevance check are visited. Relevant sidebar recommendations take priority over returning to search results. The recruiting flow performs navigation and scrolling. It does not send messages, connection requests, likes, or comments. Profile visits still follow your LinkedIn account visibility settings.
 
 ## Limits and data
 
 The initial version samples a bounded number of visible profile screens. Collapsed experience, unavailable profiles, details below the sampled area, and content behind login are not evidence. Missing information stays unknown. Explicit mismatches require a supporting quotation. Location willingness and travel availability generally need direct confirmation. Assessment uses professional requirements, not protected personal traits.
 
-Results and the activity trail are saved locally under ignored `artifacts/recruiting/`. Export before starting another session. Reloading the page retains the current server session; restarting the server does not resume a previous run. The saved JSON files remain available on disk. The synthetic browser flow has been verified with real Browser Harness and Jev calls. A signed in LinkedIn session has not yet been verified in this environment.
+All discovered URLs, including skipped titles and their screening status, plus the activity trail are saved locally under ignored `artifacts/recruiting/`. Export before starting another session. Reloading the page retains the current server session; restarting the server does not resume a previous run. The saved JSON files remain available on disk. The synthetic browser flow has been verified with real Browser Harness and Jev calls. The connected MacBook uses the signed in Chrome session.
 
 ## Development
 

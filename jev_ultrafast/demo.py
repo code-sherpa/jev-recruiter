@@ -49,7 +49,10 @@ def recruiting_command(name, body):
         max_profiles = body.get("max_profiles", 10)
         max_scrolls = body.get("max_scrolls", 10)
         # Construct successfully before replacing the previous run and its review queue.
-        replacement = Recruiter(requirements, max_profiles=max_profiles, max_scrolls=max_scrolls)
+        replacement = Recruiter(
+            requirements, max_profiles=max_profiles, max_scrolls=max_scrolls,
+            search_query=body.get("search_query", "field marketing San Francisco"),
+        )
         if RECRUITER:
             RECRUITER.close()
         RECRUITER = replacement

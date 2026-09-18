@@ -6,14 +6,15 @@ import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import urlencode, urlsplit
 from uuid import uuid4
 
 from .browser import Browser, StalePage
+from .discovery_model import screen_profiles
 from .model import choose
 from .recruiting_model import assess, parse_criteria
 
-FEED_URL = "https://www.linkedin.com/feed/"
+SEARCH_URL = "https://www.linkedin.com/search/results/people/"
 
 
 def profile_url(value):
@@ -65,7 +66,7 @@ def validate_assessment(output, criteria, evidence):
 
 
 class Recruiter:
-    def __init__(self, requirements, max_profiles=10, max_scrolls=10):
+    def __init__(self, requirements, max_profiles=10, max_scrolls=10, search_query="field marketing San Francisco"):
         if not isinstance(requirements, str) or not 10 <= len(requirements.strip()) <= 12000:
             raise ValueError("Enter job requirements between 10 and 12000 characters.")
         for label, value in (("max_profiles", max_profiles), ("max_scrolls", max_scrolls)):
@@ -80,10 +81,15 @@ class Recruiter:
         }
         if not (800 <= self.viewport["width"] <= 3840 and 600 <= self.viewport["height"] <= 2160):
             raise ValueError("Recruiting viewport must be 800 to 3840 pixels wide and 600 to 2160 pixels tall.")
+        if not isinstance(search_query, str) or not 2 <= len(search_query.strip()) <= 300:
+            raise ValueError("Enter a starting search between 2 and 300 characters.")
+        self.search_query = search_query.strip()
+        self.search_url = SEARCH_URL + "?" + urlencode({"keywords": self.search_query})
+        self.sources, self.visited, self.screen_cache = [], set(), {}
         self.run_id = uuid4().hex
         self.requirements = requirements.strip()
         self.max_profiles, self.max_scrolls = max_profiles, max_scrolls
-        self.status, self.message, self.error = "ready", "Ready to read the LinkedIn feed.", None
+        self.status, self.message, self.error = "ready", "Ready to find a relevant marketing profile.", None
         self.criteria = parse_criteria(self.requirements)
         self.candidates, self.history = [], []
         self.queue, self.seen, self.discoveries = [], set(), []
@@ -98,6 +104,7 @@ class Recruiter:
 
     def snapshot(self):
         return copy.deepcopy({
+            "search_query": self.search_query,
             "run_id": self.run_id, "requirements": self.requirements, "status": self.status,
             "message": self.message, "error": self.error, "criteria": self.criteria,
             "max_profiles": self.max_profiles, "max_scrolls": self.max_scrolls,
@@ -167,8 +174,8 @@ class Recruiter:
             raise ValueError("LinkedIn requires login or verification. Complete it manually, then start a new run.")
         if expected and profile_url(page["url"]) != expected:
             raise ValueError("The profile redirected away from its observed URL. Review it manually.")
-        if not expected and not parsed.path.startswith("/feed"):
-            raise ValueError("LinkedIn did not open the feed. Open your timeline manually before starting a new run.")
+        if not expected and not parsed.path.startswith("/search/results/people/"):
+            raise ValueError("LinkedIn did not open people search. Check the connected browser.")
         return page
 
     def command(self, name, body=None):
@@ -207,10 +214,53 @@ class Recruiter:
             raise ValueError("Unknown recruiter command.")
         return self.snapshot()
 
+    def _screen(self, page, source):
+        """Save observed links before screening their own visible professional evidence."""
+        cards = {}
+        for action in page["actions"]:
+            url = profile_url(action.get("href"))
+            if action["kind"] != "click" or not url or url in self.visited:
+                continue
+            if source["url"] and action.get("region") != "sidebar":
+                continue
+            if action.get("region") == "navigation":
+                continue
+            card = {"profile_url": url, "label": action.get("label", ""),
+                    "context": action.get("context", ""), "source_kind": "sidebar" if source["url"] else "search"}
+            if url not in cards or len(card["context"]) > len(cards[url]["context"]):
+                cards[url] = card
+            if url not in self.seen:
+                self.seen.add(url)
+                self.discoveries.append({"profile_url": url, "discovered_from": page["url"],
+                                         "source_context": card["context"], "relevance": {"status": "pending"}})
+                self._log("Saved discovered profile link", profile_url=url)
+        pending = [c for c in cards.values() if (c["profile_url"], c["context"]) not in self.screen_cache]
+        for start in range(0, len(pending), 30):
+            if self.model_calls >= 300:
+                raise ValueError("Reached the 300 request budget. Discovered profile links remain saved.")
+            batch = pending[start:start + 30]
+            self.model_calls += 1
+            self._log("Requested Jev title relevance screening", profiles=len(batch))
+            results, metadata = screen_profiles(self.requirements, batch)
+            for card in batch:
+                self.screen_cache[(card["profile_url"], card["context"])] = results[card["profile_url"]]
+            self._log("Jev screened observed professional titles", **metadata)
+        eligible = set()
+        for url, card in cards.items():
+            result = self.screen_cache[(url, card["context"])]
+            discovery = next(d for d in self.discoveries if d["profile_url"] == url)
+            discovery.update(source_context=card["context"], relevance=result)
+            if result["status"] == "relevant" and result.get("quote") and result["quote"] in card["context"]:
+                eligible.add(url)
+        self.queue = [{"profile_url": url} for url in eligible]
+        self._save()
+        return eligible, cards
+
     def _tick(self):
         if self.feed is None:
-            self.feed = Browser(FEED_URL, **self.viewport)
-            self._log("Opened owned feed tab", url=FEED_URL)
+            self.feed = Browser(self.search_url, **self.viewport)
+            self.sources.append({"browser": self.feed, "url": None, "rewind": 0})
+            self._log("Opened owned people search tab", url=self.search_url)
             self._observe(self.feed)
             return
         if self.current:
@@ -219,61 +269,72 @@ class Recruiter:
         if len(self.candidates) >= self.max_profiles:
             self.status, self.message = "done", "Profile budget reached. Review the collected evidence."
             return
-        page = self._observe(self.feed)
-        for action in page["actions"]:
-            url = profile_url(action.get("href"))
-            if not url or url in self.seen or len(self.seen) >= self.max_profiles:
-                continue
-            self.seen.add(url)
-            self.discoveries.append({"profile_url": url, "discovered_from": page["url"],
-                                     "source_context": action.get("label", "")[:1000]})
-            self._log("Saved discovered profile link", profile_url=url)
-            self.queue.append({"profile_url": url, "name": action.get("label", "LinkedIn profile")[:300],
-                               "discovered_from": page["url"], "source_context": action.get("label", "")[:1000],
-                               "evidence": [], "review": "unreviewed"})
-        reviewed = {candidate["profile_url"] for candidate in self.candidates}
+        if not self.sources:
+            self.status, self.message = "done", "No remaining relevant profile sources. Saved links remain available."
+            return
+        source = self.sources[-1]
+        browser = source["browser"]
+        page = self._observe(browser, source["url"])
+        if source["rewind"]:
+            actions = [a for a in page["actions"] if a["kind"] == "scroll" and a.get("delta", 0) < 0]
+            if actions:
+                selected = self._choose(page, actions,
+                    "Scroll up to return to this profile's similar people recommendations in the right sidebar.")
+                if selected not in {"DONE", "BLOCKED"}:
+                    action = next(a for a in actions if a["id"] == selected)
+                    self._read_action(browser, page, action)
+                    source["rewind"] -= 1
+                    return
+            source["rewind"] = 0
+        eligible, cards = self._screen(page, source)
         actions = [a for a in page["actions"] if (
-            a["kind"] == "click" and profile_url(a.get("href")) in self.seen
-            and profile_url(a.get("href")) not in reviewed
+            a["kind"] == "click" and profile_url(a.get("href")) in eligible
+            and (not source["url"] or a.get("region") == "sidebar")
         ) or (a["kind"] == "scroll" and a.get("delta", 0) > 0 and self.feed_scrolls < self.max_scrolls)
             or a["kind"] == "wait"]
         if not any(a["kind"] != "wait" for a in actions):
-            self.status = "done"
-            self.message = ("No unreviewed visible profiles or remaining feed scroll actions. "
-                            "Saved links remain available.")
+            self.sources.pop()
+            browser.close()
+            self.message = "Finished this source. Returning to the previous relevant profile."
             return
         selected = self._choose(page, actions,
-            "Open one person's profile from a post or recommendation so we can read their professional experience. "
-            "The profile does not need to match a job yet: qualification is a separate later step. "
-            "Ignore the signed in user's own profile in the left account card. "
-            "CLICK an offered unreviewed profile link to inspect it in a separate tab, "
-            "or SCROLL_DOWN to discover another person. Profile links are saved automatically. "
-            "BLOCKED only if neither opening a profile nor scrolling can make progress. "
-            "Only reading is supported. Never send messages or interact socially. "
-            "Already reviewed profile URLs: " + json.dumps(sorted(reviewed)))
+            "Open a relevant person's profile to inspect professional experience for this job: " +
+            self.requirements + ". Offered profile links passed Jev's professional title screening. "
+            "Prefer the closest field or event marketing title over adjacent marketing functions. "
+            "Prioritize CLICK on a relevant right sidebar recommendation when offered, otherwise a relevant "
+            "search result. If no relevant profile is visible, SCROLL_DOWN to reveal more. "
+            "Never open unrelated founders or engineers. Never send messages or interact socially.")
         if selected in {"DONE", "BLOCKED"}:
-            self.status = "done" if selected == "DONE" else "blocked"
-            self.message = "Jev stopped browsing. Review the saved links and evidence; coverage is not guaranteed."
+            self.sources.pop()
+            browser.close()
+            self.message = "Jev stopped this source; coverage is not guaranteed. Returning to remaining sources."
+            if not self.sources:
+                self.status = "done" if selected == "DONE" else "blocked"
             return
         action = next(a for a in actions if a["id"] == selected)
         if action["kind"] == "click":
-            if not self.feed.fresh(page, action):
+            if not browser.fresh(page, action):
                 raise StalePage("The chosen profile changed before navigation. Observe again.")
             url = profile_url(action["href"])
-            self.current = next(c for c in self.queue if c["profile_url"] == url)
-            self.queue.remove(self.current)
-            # Consume only the selected observed link. Never let a model supply a URL.
+            card = cards[url]
+            self.current = {"profile_url": url, "name": card["label"][:300],
+                            "discovered_from": page["url"], "source_context": card["context"],
+                            "relevance": self.screen_cache[(url, card["context"])],
+                            "evidence": [], "review": "unreviewed"}
             self.profile = Browser(url, **self.viewport)
+            self.visited.add(url)
+            self.queue = [c for c in self.queue if c["profile_url"] != url]
             self._log("Opened Jev selected profile in owned tab", profile_url=url)
             self.profile_scrolls = self.idle_steps = 0
         else:
-            self._read_action(self.feed, page, action)
+            self._read_action(browser, page, action)
             if action["kind"] == "scroll":
                 self.feed_scrolls += 1
         self.message = "Jev browser action completed."
 
     def _profile_tick(self):
         page = self._observe(self.profile, self.current["profile_url"])
+        self._screen(page, {"url": self.current["profile_url"]})
         text = page.get("text", "")
         if text and text not in [e["text"] for e in self.current["evidence"]]:
             self.current["evidence"].append({"url": page["url"], "text": text})
@@ -305,14 +366,16 @@ class Recruiter:
         self.current["assessment"] = {**validate_assessment(output, self.criteria, evidence), **metadata}
         self.candidates.append(self.current)
         self._log("Profile evidence assessed by Jev", profile_url=self.current["profile_url"], **metadata)
-        self.profile.close()
+        self.sources.append({"browser": self.profile, "url": self.current["profile_url"],
+                             "rewind": self.profile_scrolls})
         self.profile, self.current = None, None
         self.message = "Jev assessment and profile link saved for human review."
 
     def close(self):
-        for browser in (self.profile, self.feed):
+        for browser in {self.profile, self.feed, *(s["browser"] for s in self.sources)}:
             if browser:
                 browser.close()
+        self.sources = []
         self.profile, self.feed = None, None
         self.status = "closed"
         self.message = "Owned recruiting tabs closed. Saved candidate evidence remains available."

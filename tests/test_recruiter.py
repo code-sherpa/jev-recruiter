@@ -61,11 +61,13 @@ class FakeBrowser:
         self.instances.append(self)
 
     def observe(self, screenshot=True):
-        if self.url == recruiter.FEED_URL:
+        if self.url.startswith(recruiter.SEARCH_URL):
             actions = [
                 {'id': 'e1', 'kind': 'click', 'label': 'Alice',
+                 'context': 'Alice\nField Marketing Manager', 'region': 'main',
                  'href': 'https://www.linkedin.com/in/alice/?tracking=1'},
                 {'id': 'e2', 'kind': 'click', 'label': 'Alice duplicate',
+                 'context': 'Alice\nField Marketing Manager', 'region': 'main',
                  'href': 'https://www.linkedin.com/in/alice/'},
                 {'id': 'e3', 'kind': 'click', 'label': 'Connect',
                  'href': 'https://www.linkedin.com/mynetwork/'},
@@ -121,6 +123,12 @@ def prepared(monkeypatch, tmp_path):
             'model': 'jev-latest', 'usage': {}, 'latency_ms': 1,
         }
 
+    def screen(requirements, profiles):
+        return {p['profile_url']: {'status': 'relevant', 'quote': 'Field Marketing Manager',
+                                   'confidence': 1, 'model': 'jev-latest'} for p in profiles}, {
+            'model': 'jev-latest', 'usage': {}, 'latency_ms': 1}
+
+    monkeypatch.setattr(recruiter, 'screen_profiles', screen)
     monkeypatch.setattr(recruiter, 'choose', choose)
     monkeypatch.setattr(recruiter, 'assess', assess)
     return recruiter.Recruiter('Field events', max_profiles=1)
@@ -139,13 +147,13 @@ def test_full_bounded_run_and_human_review(prepared):
             break
     assert state['status'] == 'done'
     assert state['counts']['discovered'] == 1
-    assert state['counts']['model_calls'] == 4
+    assert state['counts']['model_calls'] == 5
     assert state['candidates'][0]['assessment']['recommendation'] == 'potential_match'
     assert state['candidates'][0]['review'] == 'unreviewed'
     assert len(FakeBrowser.instances) == 2
     assert all(b.viewport == {"width": 2048, "height": 1280} for b in FakeBrowser.instances)
     assert len(FakeBrowser.instances[1].actions) == 2
-    assert FakeBrowser.instances[1].closed
+    assert not FakeBrowser.instances[1].closed
     saved = run.path.read_text()
     assert 'private screenshot' not in saved
     assert 'secret test key' not in saved
@@ -186,8 +194,8 @@ def test_discovered_link_is_saved_before_profile_assessment(prepared):
     assert not state['candidates']
     saved = json.loads(prepared.path.read_text())
     assert saved['discoveries'][0]['profile_url'] == 'https://www.linkedin.com/in/alice/'
-    assert saved['discoveries'][0]['discovered_from'] == recruiter.FEED_URL
-    assert saved['counts']['model_calls'] == 1
+    assert saved['discoveries'][0]['discovered_from'] == prepared.search_url
+    assert saved['counts']['model_calls'] == 2
 
 
 def test_profile_budget_is_validated_before_browser(monkeypatch):
@@ -270,7 +278,7 @@ def test_waits_are_capped_at_three(prepared, monkeypatch):
     assert state['status'] == 'blocked'
     assert 'waited three times' in state['error']
     assert len(FakeBrowser.instances[0].actions) == 3
-    assert state['counts']['model_calls'] == 3
+    assert state['counts']['model_calls'] == 4
 
 
 def test_execution_logged_before_next_observation(prepared, monkeypatch):
@@ -286,3 +294,93 @@ def test_execution_logged_before_next_observation(prepared, monkeypatch):
     for _ in range(10):
         state = prepared.command('tick')
     assert state['status'] == 'done'
+
+
+def test_relevant_seed_then_sidebar_only_with_hard_title_gate(prepared, monkeypatch):
+    prepared.max_profiles = 2
+    observed = []
+
+    def card(slug, title, region='main'):
+        return {'id': slug, 'kind': 'click', 'label': slug, 'region': region,
+                'context': f'{slug}\n{title}', 'href': f'https://www.linkedin.com/in/{slug}/'}
+
+    def observe(browser, screenshot=True):
+        if browser.url.startswith(recruiter.SEARCH_URL):
+            actions = [card('founder', 'Founder'), card('engineer', 'Software Engineer'),
+                       card('unknown', ''), card('alice', 'Field Marketing Manager')]
+        elif browser.url.endswith('/alice/'):
+            actions = [card('main-marketer', 'Field Marketing Manager'),
+                       card('sidebar-founder', 'Founder', 'sidebar'),
+                       card('similar', 'Field Marketing Manager', 'sidebar')]
+        else:
+            actions = []
+        return {'url': browser.url, 'text': 'Ran field events', 'actions': actions}
+
+    def screen(requirements, profiles):
+        observed.extend(p['profile_url'] for p in profiles)
+        return {p['profile_url']: {
+            'status': 'relevant' if 'Field Marketing Manager' in p['context'] else 'unknown',
+            'quote': 'Field Marketing Manager' if 'Field Marketing Manager' in p['context'] else '',
+        } for p in profiles}, {'model': 'jev-latest', 'usage': {}, 'latency_ms': 1}
+
+    def assess(criteria, evidence, url):
+        return {'criteria': [{'criterion': criteria[0], 'status': 'met', 'quote': 'Ran field events'}]}, {}
+
+    monkeypatch.setattr(FakeBrowser, 'observe', observe)
+    monkeypatch.setattr(recruiter, 'screen_profiles', screen)
+    monkeypatch.setattr(recruiter, 'assess', assess)
+    for _ in range(15):
+        state = prepared.command('tick')
+        if state['counts']['reviewed'] == 1:
+            assert any(d['profile_url'].endswith('/similar/') for d in state['discoveries'])
+        if state['status'] == 'done':
+            break
+    assert state['status'] == 'done'
+    assert [c['profile_url'] for c in state['candidates']] == [
+        'https://www.linkedin.com/in/alice/', 'https://www.linkedin.com/in/similar/']
+    assert [b.url for b in FakeBrowser.instances][1:] == [
+        'https://www.linkedin.com/in/alice/', 'https://www.linkedin.com/in/similar/']
+    assert 'https://www.linkedin.com/in/main-marketer/' not in observed
+    assert state['counts']['discovered'] == 6
+    assert state['candidates'][1]['discovered_from'] == 'https://www.linkedin.com/in/alice/'
+
+
+def test_screening_failure_still_preserves_discovered_url(prepared, monkeypatch):
+    def fail(*args):
+        saved = json.loads(prepared.path.read_text())
+        assert saved['discoveries'][0]['profile_url'] == 'https://www.linkedin.com/in/alice/'
+        raise RuntimeError('provider failure')
+
+    monkeypatch.setattr(recruiter, 'screen_profiles', fail)
+    prepared.command('tick')
+    state = prepared.command('tick')
+    assert state['status'] == 'blocked'
+    assert len(FakeBrowser.instances) == 1
+
+
+def test_unquoted_relevance_is_never_opened(prepared, monkeypatch):
+    monkeypatch.setattr(recruiter, 'screen_profiles', lambda requirements, profiles: (
+        {p['profile_url']: {'status': 'relevant', 'quote': 'Invented role'} for p in profiles}, {}))
+    for _ in range(4):
+        state = prepared.command('tick')
+    assert state['status'] == 'done'
+    assert len(FakeBrowser.instances) == 1
+    assert not state['candidates']
+
+
+def test_relevant_links_remain_clickable_after_scroll_budget(prepared):
+    prepared.feed_scrolls = prepared.max_scrolls
+    prepared.command('tick')
+    state = prepared.command('tick')
+    assert state['status'] == 'running'
+    assert prepared.current['profile_url'] == 'https://www.linkedin.com/in/alice/'
+    assert len(FakeBrowser.instances) == 2
+
+
+def test_screening_cache_reused_after_stale_link(prepared, monkeypatch):
+    monkeypatch.setattr(FakeBrowser, 'fresh', lambda *args: False)
+    prepared.command('tick')
+    prepared.command('tick')
+    prepared.command('tick')
+    assert sum(h['action'] == 'Requested Jev title relevance screening' for h in prepared.history) == 1
+    assert sum(h['action'] == 'Requested Jev browser decision' for h in prepared.history) == 2

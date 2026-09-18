@@ -21,6 +21,68 @@
         n.nodeType===1 && n.getAttribute('aria-hidden')!=='true' ? name(n,seen) : '').join(' ').trim()) ||
       e.getAttribute('title') || e.getAttribute('placeholder') || '';
   };
+  // Restrict text and targets to the viewport and every clipping ancestor.
+  const clippedRect = (e,r=e.getBoundingClientRect()) => {
+    let left=Math.max(0,r.left),top=Math.max(0,r.top),right=Math.min(innerWidth,r.right),
+      bottom=Math.min(innerHeight,r.bottom);
+    for (let p=e.parentElement;p;p=p.parentElement) {
+      const style=getComputedStyle(p),bounds=p.getBoundingClientRect();
+      if (['auto','scroll','hidden','clip'].includes(style.overflowX)) {
+        left=Math.max(left,bounds.left); right=Math.min(right,bounds.right);
+      }
+      if (['auto','scroll','hidden','clip'].includes(style.overflowY)) {
+        top=Math.max(top,bounds.top); bottom=Math.min(bottom,bounds.bottom);
+      }
+    }
+    return right>left && bottom>top;
+  };
+  const visibleText = (root,limit=600,separator=' ') => {
+    const parts=[],walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT),range=document.createRange();
+    let node,length=0;
+    while ((node=walker.nextNode()) && length<limit) {
+      const value=node.textContent.trim(),parent=node.parentElement;
+      if (!value || !parent || parent.closest('script,style,noscript,template') || !visible(parent)) continue;
+      range.selectNodeContents(node);
+      if (![...range.getClientRects()].some(r=>clippedRect(parent,r))) continue;
+      parts.push(value); length+=value.length;
+    }
+    return parts.join(separator).slice(0,limit);
+  };
+  const profileIdentity = e => {
+    if (!e?.href) return null;
+    try {
+      const u=new URL(e.href),path=u.pathname.match(/^\/in\/([^/]+)\/?$/);
+      return path ? u.origin+'/in/'+path[1].toLowerCase() : null;
+    } catch { return null; }
+  };
+  const linkContext = e => {
+    const identity=profileIdentity(e);
+    if (!identity) return {};
+    let context=visibleText(e),scope=e;
+    // Stop at the first compact person card with text beyond its links. Never
+    // borrow a headline from another person or expand to a feed article.
+    for (let p=e.parentElement;p && p!==document.body;p=p.parentElement) {
+      if (p.matches('article,main,aside,nav,[role="main"],[role="complementary"],[role="navigation"]')) break;
+      const links=[...p.querySelectorAll('a[href]')].filter(a=>profileIdentity(a));
+      if (links.some(a=>profileIdentity(a)!==identity)) break;
+      const r=p.getBoundingClientRect(),text=visibleText(p,601);
+      if (r.height>240 || text.length>600) break;
+      const linkWords=links.map(a=>visibleText(a)).filter(Boolean);
+      scope=p; context=text || context;
+      let extra=text;
+      for (const words of linkWords) extra=extra.replace(words,'');
+      if (extra.trim()) break;
+    }
+    const alternative=[...scope.querySelectorAll('a[href]')]
+      .filter(a=>profileIdentity(a)===identity && visible(a) && clippedRect(a))
+      .map(a=>visibleText(a)).sort((a,b)=>b.length-a.length)[0];
+    const r=e.getBoundingClientRect(),main=document.querySelector('main,[role="main"]');
+    const mainRect=main?.getBoundingClientRect();
+    const region=e.closest('nav,[role="navigation"]') ? 'navigation' :
+      e.closest('aside,[role="complementary"]') || (mainRect && r.left>=mainRect.right) ? 'sidebar' :
+      e.closest('main,[role="main"]') ? 'main' : 'unknown';
+    return {context,region,...(!visibleText(e) && alternative ? {label:alternative} : {})};
+  };
   const roles=['button','link','checkbox','radio','switch','tab','menuitem','menuitemradio',
     'option','gridcell','combobox','textbox','searchbox','spinbutton'];
   const selector='a[href],button,input,textarea,select,summary,[contenteditable="true"],'+
@@ -90,11 +152,11 @@
   for (const e of document.querySelectorAll(selector)) {
     if (!safe(e) || !visible(e) || e.matches(':disabled') || e.closest('[aria-disabled="true"]')) continue;
     const r=e.getBoundingClientRect(), x=r.x+r.width/2, y=r.y+r.height/2, rname=role(e);
-    if (!rname || r.width<=0 || r.height<=0 || x<0 || y<0 || x>=innerWidth || y>=innerHeight) continue;
+    if (!clippedRect(e) || !rname || r.width<=0 || r.height<=0 || x<0 || y<0 || x>=innerWidth || y>=innerHeight) continue;
     if (rname==='gridcell' && e.querySelector('button,[role="button"]')) continue;
     const base={node:identity(e),role:rname,label:name(e)||rname,
       rect:{x:r.x,y:r.y,w:r.width,h:r.height}};
-    if (e.tagName==='A') base.href=e.href;
+    if (e.tagName==='A') Object.assign(base,{href:e.href},linkContext(e));
     for (const key of ['checked','selected','expanded']) {
       const value=e.getAttribute('aria-'+key);
       if (value!==null) base[key]=value;
@@ -114,17 +176,7 @@
       if (editable) actions.push({...base,kind:'click',value,label:'Open '+base.label});
     }
   }
-  const words=[], walker=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);
-  const range=document.createRange(); let node,length=0;
-  while ((node=walker.nextNode()) && length<6000) {
-    const value=node.textContent.trim(), parent=node.parentElement;
-    if (!value || !parent || parent.closest('script,style,noscript,template') || !visible(parent)) continue;
-    range.selectNodeContents(node); const r=range.getBoundingClientRect();
-    if (r.width>0 && r.height>0 && r.bottom>0 && r.top<innerHeight && r.right>0 && r.left<innerWidth) {
-      words.push(value); length+=value.length;
-    }
-  }
-  const text=words.join('\n').slice(0,6000);
+  const text=visibleText(document.body,6000,'\n');
   const page_key=cache.pageKey(), guards={};
   for (const a of actions) if (!(a.node in guards)) guards[a.node]=cache.guard(cache.nodes.get(a.node));
   // Compare meaning and identity. Geometry is always resolved and hit-tested just before input.
