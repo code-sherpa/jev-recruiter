@@ -236,9 +236,12 @@ class Recruiter:
                             "Saved links remain available.")
             return
         selected = self._choose(page, actions,
-            "Discover and inspect people appearing in this LinkedIn feed for this role: " + self.requirements +
-            " Open an unreviewed visible profile before scrolling for more. Profile links are saved automatically. "
-            "Choose CLICK to inspect the selected observed profile in a separate tab. Scroll to discover more people. "
+            "Open one person's profile from a post or recommendation so we can read their professional experience. "
+            "The profile does not need to match a job yet: qualification is a separate later step. "
+            "Ignore the signed in user's own profile in the left account card. "
+            "CLICK an offered unreviewed profile link to inspect it in a separate tab, "
+            "or SCROLL_DOWN to discover another person. Profile links are saved automatically. "
+            "BLOCKED only if neither opening a profile nor scrolling can make progress. "
             "Only reading is supported. Never send messages or interact socially. "
             "Already reviewed profile URLs: " + json.dumps(sorted(reviewed)))
         if selected in {"DONE", "BLOCKED"}:
@@ -271,9 +274,10 @@ class Recruiter:
                    (a["kind"] == "scroll" and a.get("delta", 0) > 0)]
         if self.profile_scrolls < 2 and any(a["kind"] == "scroll" for a in actions):
             selected = self._choose(page, actions,
-                "Read this person's professional profile for the following job requirements: " + self.requirements +
-                " Scroll down to gather missing experience or qualifications. Choose DONE when the visible evidence "
-                "is sufficient to assess, or no more useful reading is possible. Missing information stays unknown. "
+                "Collect visible text about this person's professional experience, About section, and location. "
+                "Scroll down to read experience that has not yet been observed. Choose DONE when these sections "
+                "have been read or no further useful reading is possible. Do not assess job fit in this decision. "
+                "Missing qualifications are not a reason to choose BLOCKED; assessment happens in a later step. "
                 "Only scrolling or waiting is supported; never interact socially. Previously collected evidence: " +
                 json.dumps([item["text"] for item in self.current["evidence"]]))
             if selected == "BLOCKED":
