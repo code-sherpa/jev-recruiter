@@ -442,3 +442,81 @@ def test_allowed_sidebar_section_provenance_saved(prepared, monkeypatch, index):
     saved = json.loads(prepared.path.read_text())
     assert saved['discoveries'][0]['sidebar_section_index'] == index
     assert saved['discoveries'][0]['sidebar_section_title'] == 'People you may know'
+
+
+@pytest.mark.parametrize('target', [0, -1, 3, True, '2'])
+def test_invalid_match_target(prepared, target):
+    with pytest.raises(ValueError, match='target_matches'):
+        recruiter.Recruiter('Solutions engineer', max_profiles=2, target_matches=target)
+
+
+@pytest.mark.parametrize('scrolls', [-1, 21, True, '6'])
+def test_invalid_profile_scroll_limit(prepared, scrolls):
+    with pytest.raises(ValueError, match='max_profile_scrolls'):
+        recruiter.Recruiter('Solutions engineer', max_profile_scrolls=scrolls)
+
+
+def test_extended_profile_reading_remains_bounded(prepared):
+    prepared.max_profile_scrolls = 6
+    for _ in range(20):
+        state = prepared.command('tick')
+        if state['status'] == 'done':
+            break
+    assert len(FakeBrowser.instances[1].actions) == 6
+    assert state['max_profile_scrolls'] == 6
+    assert 'At most 7' in state['limitations']
+
+
+@pytest.mark.parametrize('max_profiles,expected_qualified,target_reached', [(3, 2, True), (2, 1, False)])
+def test_match_target_counts_evidence_not_visits_or_shortlists(
+        prepared, monkeypatch, max_profiles, expected_qualified, target_reached):
+    run = recruiter.Recruiter('Solutions engineer\n3 to 5 years relevant professional experience',
+                              max_profiles=max_profiles, target_matches=2)
+    slugs = ['unknown-experience', 'first-match', 'second-match']
+
+    def observe(browser, screenshot=True):
+        if browser.url.startswith(recruiter.SEARCH_URL):
+            actions = [{'id': slug, 'kind': 'click', 'label': slug, 'region': 'main',
+                        'context': 'Solutions Engineer', 'href': f'https://www.linkedin.com/in/{slug}/'}
+                       for slug in slugs]
+        else:
+            actions = []
+        return {'url': browser.url, 'text': 'Solutions Engineer\n4 years relevant professional experience',
+                'actions': actions}
+
+    def screen(requirements, profiles):
+        return {p['profile_url']: {'status': 'relevant', 'quote': 'Solutions Engineer'} for p in profiles}, {}
+
+    def choose(page, goal, history):
+        assert 'field or event marketing' not in goal
+        assert 'Never open unrelated founders or engineers' not in goal
+        return decision(page['actions'][0]['id'], 'CLICK')
+
+    def assess(criteria, evidence, url):
+        return {'criteria': [
+            {'criterion': criteria[0], 'status': 'met', 'quote': 'Solutions Engineer'},
+            {'criterion': criteria[1], 'status': 'unknown' if 'unknown-experience' in url else 'met',
+             'quote': '' if 'unknown-experience' in url else '4 years relevant professional experience'},
+        ]}, {}
+
+    monkeypatch.setattr(FakeBrowser, 'observe', observe)
+    monkeypatch.setattr(recruiter, 'screen_profiles', screen)
+    monkeypatch.setattr(recruiter, 'choose', choose)
+    monkeypatch.setattr(recruiter, 'assess', assess)
+    for _ in range(30):
+        state = run.command('tick')
+        if state['candidates']:
+            run.command('review', {'profile_url': state['candidates'][0]['profile_url'], 'decision': 'shortlisted'})
+        if state['status'] == 'done':
+            break
+    assert state['status'] == 'done'
+    assert state['counts']['qualified'] == expected_qualified
+    assert state['counts']['reviewed'] == max_profiles
+    assert state['target_reached'] is target_reached
+    assert state['target_matches'] == 2
+    assert state['max_model_calls'] == 1000
+    assert ('target was not reached' in state['message']) is not target_reached
+    assert state['candidates'][0]['assessment']['recommendation'] == 'needs_review'
+    calls = state['counts']['model_calls']
+    assert run.command('tick')['counts']['model_calls'] == calls
+    assert json.loads(run.path.read_text())['target_reached'] is target_reached

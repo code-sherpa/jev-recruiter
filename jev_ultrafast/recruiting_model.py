@@ -3,6 +3,7 @@
 import os
 import re
 import time
+from datetime import datetime, timezone
 
 from .model import post_json, validate_choice
 
@@ -16,6 +17,11 @@ Only assess the profile subject, never people in sidebar recommendations or post
 Missing, ambiguous, partial or uncertain evidence means unknown, never not_met.
 Require explicit evidence for willingness to relocate, work in an office or travel; location and
 employer alone do not establish willingness. Do not invent facts or infer absent qualifications.
+For experience duration, use only the subject's explicitly dated relevant professional roles or an
+explicit professional experience duration. Count the union of overlapping periods, never sum concurrent
+roles twice. Interpret Present using assessment_date_utc. Do not count education or unrelated roles.
+Incomplete dates or an incomplete relevant work history mean unknown when they cannot establish the
+entire requested duration range. Never use professional dates to infer age or other protected traits.
 """
 
 STATUSES = {
@@ -48,20 +54,42 @@ def parse_criteria(requirements):
 
 
 def evidence_choices(evidence):
-    """Return at most 50 distinct verbatim excerpts; never fabricate quotation text."""
-    snippets = []
+    """Keep neighboring role and date lines together in bounded, verbatim windows."""
+    snippets, first_windows, dated_windows = [], [], []
     seen = set()
     for text in evidence:
-        for line in text.splitlines():
-            # Bound long DOM text lines while preserving exact original substrings.
-            for start in range(0, len(line), 1000):
-                snippet = line[start:start + 1000].strip()
-                if snippet and snippet not in seen:
-                    seen.add(snippet)
-                    snippets.append(snippet)
-    # Sample the entire observation rather than silently discarding later profile screens.
+        start = 0
+        first = True
+        while start < len(text):
+            end = min(start + 1000, len(text))
+            # Prefer whole lines, without losing progress on unusually long DOM lines.
+            boundary = text.rfind("\n", start + 500, end)
+            if end < len(text) and boundary >= 0:
+                end = boundary
+            snippet = text[start:end].strip()
+            if snippet and snippet not in seen:
+                seen.add(snippet)
+                snippets.append(snippet)
+                if first:
+                    first_windows.append(snippet)
+                if re.search(r"\b(?:19|20)\d{2}\b|\b\d+\s+(?:years?|yrs?|months?|mos?)\b", snippet, re.I):
+                    dated_windows.append(snippet)
+            first = False
+            if end == len(text):
+                break
+            # Overlap the last three lines (at most half a window) to preserve role/date pairs.
+            overlap = text[max(start, end - 500):end].splitlines(keepends=True)
+            start = max(start + 1, end - len("".join(overlap[-3:])))
     if len(snippets) > 50:
-        snippets = [snippets[i * (len(snippets) - 1) // 49] for i in range(50)]
+        # Every observed screen retains its first window. Dated professional evidence
+        # gets priority over repetitive activity; remaining slots span other content.
+        selected = list(dict.fromkeys(first_windows))[:50]
+        for pool in (dated_windows, snippets):
+            remaining = [snippet for snippet in pool if snippet not in selected]
+            slots = min(50 - len(selected), len(remaining))
+            if slots:
+                selected.extend(remaining[i * (len(remaining) - 1) // max(1, slots - 1)] for i in range(slots))
+        snippets = [snippet for snippet in snippets if snippet in selected]
     return {f"e{i}": snippet for i, snippet in enumerate(snippets, 1)}
 
 
@@ -95,7 +123,8 @@ def assess(criteria, evidence, profile_url):
         }
     body = {
         "model": os.environ.get("TYPESAFE_MODEL", "jev-latest"),
-        "state": {"profile_url": profile_url, "observed_evidence": excerpts},
+        "state": {"profile_url": profile_url, "observed_evidence": excerpts,
+                  "assessment_date_utc": datetime.now(timezone.utc).date().isoformat()},
         "questions": questions,
     }
     started = time.perf_counter()

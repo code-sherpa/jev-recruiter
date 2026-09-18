@@ -1,13 +1,8 @@
 const $ = (id) => document.getElementById(id);
 const token = document.querySelector('meta[name="demo-token"]').content;
-const draft = `Location: Based in the San Francisco Bay Area, or willing to work in San Francisco (confirm willingness directly).
-Experience: At least 3 years in B2B marketing, including hands on field marketing or event ownership.
-Events: Owned regional events, executive dinners, meetups, or trade shows from planning through follow up.
-Sales partnership: Worked with sales teams on target accounts, event follow up, and regional campaigns.
-Measurement: Measured event results and sourced or influenced sales pipeline.
-Tools: Practical CRM and marketing automation experience, such as Salesforce, HubSpot, or Marketo.
-Travel: Willing to travel for events (confirm directly).
-Preferred: B2B software or technology marketing experience.`;
+const draft = `Role: Forward deployed engineer or solutions engineer (either title qualifies).
+Experience: 3 to 5 years of relevant professional engineering experience, supported by visible employment dates or an explicit duration. Do not count overlapping roles twice. Missing dates remain unknown.
+Location: Based in San Francisco or the San Francisco Bay Area.`;
 let state = null, busy = false, automatic = false, filter = "all";
 const escape = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
 const labels = {potential_match:"Potential match", needs_review:"Needs review", not_a_match:"Not a match"};
@@ -30,6 +25,7 @@ function controls() {
   $("search-query").disabled = busy || automatic;
   $("max-profiles").disabled = busy || automatic;
   $("max-scrolls").disabled = busy || automatic;
+  $("target-matches").disabled = busy || automatic;
   $("step").disabled = busy || automatic || !active();
   $("run").disabled = busy || !active();
   $("run").hidden = automatic;
@@ -73,7 +69,7 @@ function renderCandidates() {
   const visible = candidates.filter((candidate) => filter === "all" || candidate.review === filter || candidate.assessment?.recommendation === filter);
   $("candidate-count").textContent = candidates.length;
   if (!visible.length) {
-    $("candidates").innerHTML = `<div class="candidates-empty"><span aria-hidden="true">◎</span><h3>${candidates.length ? "No people in this view yet." : "A shortlist starts with discovery."}</h3><p>${candidates.length ? "Try another filter to see your discoveries." : "People from searches and similar profile recommendations will appear here with<br class=\"desktop-break\" /> profile evidence, criteria checks, and gaps to follow up on."}</p></div>`;
+    $("candidates").innerHTML = `<p class="candidates-empty">${candidates.length ? "no people in this view. try another filter." : "no profiles saved yet. start a search to find people."}</p>`;
     return;
   }
   $("candidates").innerHTML = visible.map((candidate) => {
@@ -88,13 +84,14 @@ function renderCandidates() {
     const criteria = assessment?.criteria || [];
     const review = candidate.review || "unreviewed";
     return `<article class="candidate-card"><div class="candidate-top"><div class="candidate-identity"><span class="avatar" aria-hidden="true">${escape(initials)}</span><div><h3 class="candidate-name">${url ? `<a href="${escape(url)}" target="_blank" rel="noopener noreferrer">${escape(name)} <span aria-hidden="true">↗</span></a>` : escape(name)}</h3><p class="candidate-source">${escape(candidate.discovered_from || "From discovery")}${candidate.sidebar_section_index ? ` · Sidebar section ${escape(candidate.sidebar_section_index)}: ${escape(candidate.sidebar_section_title || "Profile recommendations")}` : ""}</p></div></div><span class="badge ${recommendation === "potential_match" ? "match" : recommendation === "not_a_match" ? "unmatched" : ""}">${labels[recommendation] || screeningLabel}</span></div>
+    <details class="listing-details"><summary>details &amp; evidence</summary>
     ${url ? `<a class="profile-link" href="${escape(url)}" target="_blank" rel="noopener noreferrer">${escape(url)} ↗</a>` : ""}
     ${assessment?.model ? `<p class="assessment-model">Assessed by Jev · ${escape(assessment.model)}${Number.isFinite(assessment.latency_ms) ? ` · ${escape(assessment.latency_ms)} ms` : ""}</p>` : ""}
     <p class="candidate-summary">${escape(assessment?.summary || (skipped ? "Link saved without opening the profile. The visible title did not establish relevance." : "Profile link saved. Evidence will appear after the profile is visited."))}</p>
     ${candidate.relevance?.quote ? `<p class="candidate-summary">Title evidence: ${escape(candidate.relevance.quote)}</p>` : ""}
     <div class="criteria">${criteria.map((item) => `<div class="criterion"><span class="criterion-status ${item.status === "unknown" ? "unknown" : item.status === "not_met" ? "unmet" : ""}">${item.status === "met" ? "✓ Evidence found" : item.status === "not_met" ? "Does not meet" : "? Not confirmed"}</span><div><strong>${escape(item.criterion)}</strong>${item.quote ? `<blockquote>“${escape(item.quote)}”</blockquote>` : ""}</div></div>`).join("")}</div>
     ${(candidate.evidence || []).length ? `<details class="evidence"><summary>View observed evidence</summary>${candidate.evidence.map((item) => `<blockquote>${escape(item.text)}${safeProfileUrl(item.url) ? `<br /><a href="${escape(safeProfileUrl(item.url))}" target="_blank" rel="noopener noreferrer">View source ↗</a>` : ""}</blockquote>`).join("")}</details>` : ""}
-    <div class="candidate-bottom"><span class="review-label">${escape(candidate.pending ? (skipped ? "Link saved. Profile skipped." : "Link saved. Assessment pending.") : reviewLabels[review] || reviewLabels.unreviewed)}</span><div class="review-actions">${url ? `<button type="button" data-copy="${escape(url)}" aria-label="Copy profile link for ${escape(name)}">Copy link</button>` : ""}${candidate.pending ? "" : `<button type="button" data-review="shortlisted" data-url="${escape(candidate.profile_url)}" aria-label="Shortlist ${escape(name)}" aria-pressed="${review === "shortlisted"}">Shortlist</button><button type="button" data-review="passed" data-url="${escape(candidate.profile_url)}" aria-label="Pass on ${escape(name)}" aria-pressed="${review === "passed"}">Pass</button>${review !== "unreviewed" ? `<button type="button" data-review="unreviewed" data-url="${escape(candidate.profile_url)}" aria-label="Clear review for ${escape(name)}">Undo</button>` : ""}`}</div></div></article>`;
+    <div class="candidate-bottom"><span class="review-label">${escape(candidate.pending ? (skipped ? "Link saved. Profile skipped." : "Link saved. Assessment pending.") : reviewLabels[review] || reviewLabels.unreviewed)}</span><div class="review-actions">${url ? `<button type="button" data-copy="${escape(url)}" aria-label="Copy profile link for ${escape(name)}">Copy link</button>` : ""}${candidate.pending ? "" : `<button type="button" data-review="shortlisted" data-url="${escape(candidate.profile_url)}" aria-label="Shortlist ${escape(name)}" aria-pressed="${review === "shortlisted"}">Shortlist</button><button type="button" data-review="passed" data-url="${escape(candidate.profile_url)}" aria-label="Pass on ${escape(name)}" aria-pressed="${review === "passed"}">Pass</button>${review !== "unreviewed" ? `<button type="button" data-review="unreviewed" data-url="${escape(candidate.profile_url)}" aria-label="Clear review for ${escape(name)}">Undo</button>` : ""}`}</div></div></details></article>`;
   }).join("");
 }
 function renderDecision() {
@@ -119,6 +116,7 @@ function render() {
   const counts = state.counts || {};
   $("discovered-count").textContent = counts.discovered || 0;
   $("reviewed-count").textContent = counts.reviewed || 0;
+  $("qualified-count").textContent = `${counts.qualified || 0} / ${state.target_matches || $("target-matches").value}`;
   $("shortlist-count").textContent = (state.candidates || []).filter((candidate) => candidate.review === "shortlisted").length;
   $("scroll-count").textContent = counts.feed_scrolls || 0;
   const statuses = {ready:"Ready for the next step",running:"Ready for the next step",blocked:"Paused. Needs attention.",done:"Discovery complete. Review your candidates.",closed:"Session ended. Your discoveries remain available."};
@@ -140,9 +138,9 @@ function render() {
   renderDecision();
   controls();
 }
-try { $("requirements").value = localStorage.getItem("jev.recruiting.requirements") ?? draft; }
+try { $("requirements").value = localStorage.getItem("jev.recruiting.engineering.requirements") ?? draft; }
 catch { $("requirements").value = draft; }
-$("requirements").addEventListener("input", () => { try { localStorage.setItem("jev.recruiting.requirements", $("requirements").value); } catch { /* The brief remains available for this session. */ } });
+$("requirements").addEventListener("input", () => { try { localStorage.setItem("jev.recruiting.engineering.requirements", $("requirements").value); } catch { /* The brief remains available for this session. */ } });
 $("brief-form").addEventListener("submit", (event) => {
   event.preventDefault();
   automatic = false;
@@ -150,11 +148,12 @@ $("brief-form").addEventListener("submit", (event) => {
   const criteria = requirements.split(/\n/).filter((line) => line.trim());
   if (criteria.length > 20) { $("requirements").setCustomValidity("Use up to 20 criteria, one per line."); $("requirements").reportValidity(); return; }
   if (requirements.length < 10) { $("requirements").setCustomValidity("Describe the role in at least 10 characters."); $("requirements").reportValidity(); return; }
-  perform(() => request("start", {requirements, search_query:$("search-query").value.trim(), max_profiles:Number($("max-profiles").value), max_scrolls:Number($("max-scrolls").value)}), "Opening LinkedIn in your Chrome…");
+  perform(() => request("start", {requirements, search_query:$("search-query").value.trim(), max_profiles:Number($("max-profiles").value), max_scrolls:Number($("max-scrolls").value), target_matches:Number($("target-matches").value), max_profile_scrolls:6}), "Opening LinkedIn in your Chrome…");
 });
 $("requirements").addEventListener("input", () => $("requirements").setCustomValidity(""));
-$("step").addEventListener("click", () => perform(() => request("tick", {}), "Observing the next profile or search page…"));
+$("step").addEventListener("click", () => perform(() => { $("live-browser").open = true; return request("tick", {}); }, "Observing the next profile or search page…"));
 $("run").addEventListener("click", () => perform(async () => {
+  $("live-browser").open = true;
   automatic = true;
   controls();
   while (automatic && active()) {
@@ -198,6 +197,11 @@ perform(async () => {
   await request("state");
   if (state.requirements) $("requirements").value = state.requirements;
   if (state.search_query) $("search-query").value = state.search_query;
+  if (state.target_matches) $("target-matches").value = state.target_matches;
   if (state.max_profiles) $("max-profiles").value = state.max_profiles;
   if (state.max_scrolls) $("max-scrolls").value = state.max_scrolls;
 }, "Connecting to your workspace…");
+
+document.querySelectorAll('a[href="#role-settings"]').forEach(link => link.addEventListener("click", () => { $("role-settings").open = true; }));
+
+$("brief-form").addEventListener("invalid", event => { const details = event.target.closest("details"); if (details) details.open = true; }, true);

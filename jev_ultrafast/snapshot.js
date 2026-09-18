@@ -36,12 +36,13 @@
     }
     return right>left && bottom>top;
   };
-  const visibleText = (root,limit=600,separator=' ') => {
+  const visibleText = (root,limit=600,separator=' ',exclude='') => {
     const parts=[],walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT),range=document.createRange();
     let node,length=0;
     while ((node=walker.nextNode()) && length<limit) {
       const value=node.textContent.trim(),parent=node.parentElement;
-      if (!value || !parent || parent.closest('script,style,noscript,template') || !visible(parent)) continue;
+      if (!value || !parent || parent.closest('script,style,noscript,template') ||
+        (exclude && parent.closest(exclude)) || !visible(parent)) continue;
       range.selectNodeContents(node);
       if (![...range.getClientRects()].some(r=>clippedRect(parent,r))) continue;
       parts.push(value); length+=value.length;
@@ -209,6 +210,12 @@
     }
   }
   const text=visibleText(document.body,6000,'\n');
+  // Main can contain recommendation columns. Keep them available to navigation,
+  // but never attribute another person's text to the profile being assessed.
+  const isProfile=location.hostname==='www.linkedin.com' && /^\/in\/[^/]+\/?$/.test(location.pathname);
+  const profileMain=isProfile ? document.querySelector('main,[role="main"]') : null;
+  const profile_text=isProfile ? (profileMain ? visibleText(profileMain,6000,'\n',
+    'aside,[role="complementary"],nav,[role="navigation"],dialog,[role="dialog"]') : '') : undefined;
   const page_key=cache.pageKey(), guards={};
   for (const a of actions) if (!(a.node in guards)) guards[a.node]=cache.guard(cache.nodes.get(a.node),sidebarSections);
   // Compare meaning and identity. Geometry is always resolved and hit-tested just before input.
@@ -224,6 +231,7 @@
     actions.push({id:'scroll_up',kind:'scroll',label:'Scroll up',delta:-560,...scroll});
   actions.push({id:'wait',kind:'wait',label:'Wait for the page to update'});
   return {url:location.href,title:document.title,w:innerWidth,h:innerHeight,text,
+    ...(isProfile ? {profile_text} : {}),
     scroll:scroll || {y:scrollY,height:document.documentElement.scrollHeight},
     actions,marker,page_key,guards,omitted_actions};
 })()

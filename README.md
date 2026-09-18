@@ -2,7 +2,7 @@
 
 A local LinkedIn sourcing workspace adapted from [Jev Ultrafast](https://github.com/browser-use/jev-ultrafast).
 
-Edit the San Francisco field marketer brief, open a session, and run discovery. The browser starts with a people search for field marketing in San Francisco. Jev screens each visible professional title before opening a relevant profile, then follows relevant recommendations in that profile’s right sidebar. Unrelated or unknown titles cannot be opened. Profile evidence is compared with your requirements. Review the evidence yourself and mark candidates as shortlisted or passed.
+Edit the San Francisco engineering brief, open a session, and run discovery. The browser starts with a people search for forward deployed engineers or solutions engineers in San Francisco. Jev screens each visible professional title before opening a relevant profile, then follows relevant recommendations in that profile’s right sidebar. Unrelated or unknown titles cannot be opened. Profile evidence is compared with your requirements. Review the evidence yourself and mark candidates as shortlisted or passed.
 
 ## Run locally
 
@@ -22,7 +22,7 @@ Browser control uses the upstream `browser-harness==0.1.13` dependency, includin
 
 ## Workflow
 
-1. Edit the suggested field marketer requirements, one criterion per line (up to 20). Start optional criteria with `Preferred:`. Edit the starting search and set profile and discovery scrolling limits.
+1. Edit the suggested engineering requirements, one criterion per line (up to 20). Start optional criteria with `Preferred:`. Edit the starting search and set profile and discovery scrolling limits.
 2. Start a session, then use the step or automatic run controls to collect profiles and evidence. Pause takes effect after the current request.
 3. Review each criterion, its supporting quotation, and any missing information. The recommendation is an aid to your review, not a hiring decision.
 4. Shortlist or pass candidates yourself. Export the results as JSON.
@@ -31,7 +31,7 @@ Only visible, observed LinkedIn profile URLs that pass Jev’s title relevance c
 
 ## Limits and data
 
-The initial version samples a bounded number of visible profile screens. Collapsed experience, unavailable profiles, details below the sampled area, and content behind login are not evidence. Missing information stays unknown. Explicit mismatches require a supporting quotation. Location willingness and travel availability generally need direct confirmation. Assessment uses professional requirements, not protected personal traits.
+The app samples a bounded number of visible profile screens (the interface requests up to seven). A supported match must have evidence for every required criterion. The target counter does not count unknown or conflicting assessments, and the review budget can stop a run before its target is reached. Collapsed experience, unavailable profiles, details below the sampled area, and content behind login are not evidence. Missing information stays unknown. Explicit mismatches require a supporting quotation. Location willingness and travel availability generally need direct confirmation. Assessment uses professional requirements, not protected personal traits.
 
 All discovered URLs, including skipped titles and their screening status, plus the activity trail are saved locally under ignored `artifacts/recruiting/`. Export before starting another session. Reloading the page retains the current server session; restarting the server does not resume a previous run. The saved JSON files remain available on disk. The synthetic browser flow has been verified with real Browser Harness and Jev calls. The connected MacBook uses the signed in Chrome session.
 

@@ -72,13 +72,19 @@ def validate_assessment(output, criteria, evidence):
 
 
 class Recruiter:
-    def __init__(self, requirements, max_profiles=10, max_scrolls=10, search_query="field marketing San Francisco"):
+    def __init__(self, requirements, max_profiles=10, max_scrolls=10,
+                 search_query='"forward deployed engineer" OR "solutions engineer"', target_matches=None,
+                 max_profile_scrolls=2):
         if not isinstance(requirements, str) or not 10 <= len(requirements.strip()) <= 12000:
             raise ValueError("Enter job requirements between 10 and 12000 characters.")
         for label, value in (("max_profiles", max_profiles), ("max_scrolls", max_scrolls)):
             limit = 50 if label == "max_profiles" else 100
             if type(value) is not int or not 1 <= value <= limit:
                 raise ValueError(f"{label} must be an integer from 1 to {limit}.")
+        if target_matches is not None and (type(target_matches) is not int or not 1 <= target_matches <= max_profiles):
+            raise ValueError("target_matches must be an integer from 1 to max_profiles, or null.")
+        if type(max_profile_scrolls) is not int or not 0 <= max_profile_scrolls <= 20:
+            raise ValueError("max_profile_scrolls must be an integer from 0 to 20.")
         if not os.environ.get("TYPESAFE_API_KEY", "").strip():
             raise ValueError("Configure TYPESAFE_API_KEY before starting recruiting.")
         self.viewport = {
@@ -95,7 +101,10 @@ class Recruiter:
         self.run_id = uuid4().hex
         self.requirements = requirements.strip()
         self.max_profiles, self.max_scrolls = max_profiles, max_scrolls
-        self.status, self.message, self.error = "ready", "Ready to find a relevant marketing profile.", None
+        self.target_matches = target_matches
+        self.max_profile_scrolls = max_profile_scrolls
+        self.max_model_calls = 1000 if target_matches is not None else 300
+        self.status, self.message, self.error = "ready", "Ready to find a relevant professional profile.", None
         self.criteria = parse_criteria(self.requirements)
         self.candidates, self.history = [], []
         self.queue, self.seen, self.discoveries = [], set(), []
@@ -114,19 +123,38 @@ class Recruiter:
             "run_id": self.run_id, "requirements": self.requirements, "status": self.status,
             "message": self.message, "error": self.error, "criteria": self.criteria,
             "max_profiles": self.max_profiles, "max_scrolls": self.max_scrolls,
+            "target_matches": self.target_matches,
+            "max_profile_scrolls": self.max_profile_scrolls, "max_model_calls": self.max_model_calls,
+            "target_reached": self.target_matches is not None and self.qualified_count >= self.target_matches,
             "counts": {"discovered": len(self.seen), "reviewed": len(self.candidates),
+                       "qualified": self.qualified_count,
                        "queued": len(self.queue), "feed_scrolls": self.feed_scrolls,
                        "model_calls": self.model_calls},
             "candidates": self.candidates, "history": self.history,
             "discoveries": self.discoveries,
             "decision": self.decision, "model": os.environ.get("TYPESAFE_MODEL", "jev-latest"),
             "viewport": self.viewport,
-            "limitations": "Only three visible profile screens are read. Collapsed sections are not expanded. "
+            "limitations": f"At most {self.max_profile_scrolls + 1} visible profile screens are read. "
+                            "Collapsed sections are not expanded. "
                             "Nearby recommendations may appear in excerpts. Verify evidence belongs to the candidate. "
                             "Profile visits can be visible to their owners. All recommendations need human review.",
             "page": {k: self.page[k] for k in ("url", "title", "text", "screenshot") if k in self.page}
             if self.page else None,
         })
+
+    @property
+    def qualified_count(self):
+        """Count only evidence supported matches, independently of human shortlist choices."""
+        return sum(candidate.get("assessment", {}).get("recommendation") == "potential_match"
+                   for candidate in self.candidates)
+
+    def _target_reached(self):
+        if self.target_matches is None or self.qualified_count < self.target_matches:
+            return False
+        self.status = "done"
+        self.message = (f"Found {self.qualified_count} profiles with evidence supporting all required criteria. "
+                        "Human review is required.")
+        return True
 
     def _save(self):
         state = self.snapshot()
@@ -142,8 +170,8 @@ class Recruiter:
         self._save()
 
     def _choose(self, page, actions, goal):
-        if self.model_calls >= 300:
-            raise ValueError("Reached the 300 request budget. Review saved profiles before starting again.")
+        if self.model_calls >= self.max_model_calls:
+            raise ValueError(f"Reached the {self.max_model_calls} request budget. Review saved profiles.")
         self.model_calls += 1
         self._log("Requested Jev browser decision")
         # The upstream operation and target heads see only supported reading actions.
@@ -247,8 +275,8 @@ class Recruiter:
                 self._log("Saved discovered profile link", profile_url=url)
         pending = [c for c in cards.values() if (c["profile_url"], c["context"]) not in self.screen_cache]
         for start in range(0, len(pending), 30):
-            if self.model_calls >= 300:
-                raise ValueError("Reached the 300 request budget. Discovered profile links remain saved.")
+            if self.model_calls >= self.max_model_calls:
+                raise ValueError(f"Reached the {self.max_model_calls} request budget. Discovered links remain saved.")
             batch = pending[start:start + 30]
             self.model_calls += 1
             self._log("Requested Jev title relevance screening", profiles=len(batch))
@@ -268,6 +296,8 @@ class Recruiter:
         return eligible, cards
 
     def _tick(self):
+        if self._target_reached():
+            return
         if self.feed is None:
             self.feed = Browser(self.search_url, **self.viewport)
             self.sources.append({"browser": self.feed, "url": None, "rewind": 0})
@@ -279,6 +309,9 @@ class Recruiter:
             return
         if len(self.candidates) >= self.max_profiles:
             self.status, self.message = "done", "Profile budget reached. Review the collected evidence."
+            if self.target_matches is not None:
+                self.message += (f" Found {self.qualified_count} of {self.target_matches} requested matches. "
+                                 "The match target was not reached.")
             return
         if not self.sources:
             self.status, self.message = "done", "No remaining relevant profile sources. Saved links remain available."
@@ -333,13 +366,13 @@ class Recruiter:
             "This step only chooses which already title screened profile to read. "
             "Do not require a profile to meet every job requirement; qualification assessment happens after the visit. "
             "Offered profile links passed Jev's professional title screening for the starting search: " +
-            self.search_query + ". Prefer the closest field or event marketing title "
-            "over adjacent marketing functions. "
+            self.search_query + ". Prefer titles most directly relevant to the requested role. "
+            "Job requirements: " + self.requirements + ". "
             "Prioritize CLICK on a relevant recommendation from sidebar profile section two or three when offered, "
             "otherwise a relevant "
             "search result. The first sidebar profile section is excluded. "
             "If no eligible profile is visible, SCROLL_DOWN past the first section to reveal sections two and three. "
-            "Never open unrelated founders or engineers. Never send messages or interact socially.")
+            "Never open unrelated professional titles. Never send messages or interact socially.")
         if selected in {"DONE", "BLOCKED"}:
             self.sources.pop()
             browser.close()
@@ -373,14 +406,16 @@ class Recruiter:
     def _profile_tick(self):
         page = self._observe(self.profile, self.current["profile_url"])
         self._screen(page, {"url": self.current["profile_url"]})
-        text = page.get("text", "")
+        text = page.get("profile_text", page.get("text", ""))
         if text and text not in [e["text"] for e in self.current["evidence"]]:
             self.current["evidence"].append({"url": page["url"], "text": text})
         actions = [a for a in page["actions"] if a["kind"] == "wait" or
                    (a["kind"] == "scroll" and a.get("delta", 0) > 0)]
-        if self.profile_scrolls < 2 and any(a["kind"] == "scroll" for a in actions):
+        if self.profile_scrolls < self.max_profile_scrolls and any(a["kind"] == "scroll" for a in actions):
             selected = self._choose(page, actions,
                 "Collect visible text about this person's professional experience, About section, and location. "
+                "Read dated Experience entries to establish relevant professional experience duration when requested. "
+                "Scroll past Activity when needed to reach Experience. Never infer age from professional dates. "
                 "Scroll down to read experience that has not yet been observed. Choose DONE when these sections "
                 "have been read or no further useful reading is possible. Do not assess job fit in this decision. "
                 "Missing qualifications are not a reason to choose BLOCKED; assessment happens in a later step. "
@@ -396,8 +431,8 @@ class Recruiter:
                 self.message = "Jev is gathering visible profile evidence."
                 return
         evidence = [e["text"] for e in self.current["evidence"]]
-        if self.model_calls >= 300:
-            raise ValueError("Reached the 300 request budget. Discovered profile links remain saved.")
+        if self.model_calls >= self.max_model_calls:
+            raise ValueError(f"Reached the {self.max_model_calls} request budget. Discovered links remain saved.")
         self.model_calls += 1
         self._log("Requested Jev qualification and evidence choices", profile_url=self.current["profile_url"])
         output, metadata = assess(self.criteria, evidence, self.current["profile_url"])
@@ -408,6 +443,7 @@ class Recruiter:
                              "rewind": self.profile_scrolls})
         self.profile, self.current = None, None
         self.message = "Jev assessment and profile link saved for human review."
+        self._target_reached()
 
     def close(self):
         for browser in {self.profile, self.feed, *(s["browser"] for s in self.sources)}:

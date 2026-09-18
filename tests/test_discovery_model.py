@@ -127,5 +127,19 @@ def test_all_heads_prohibit_post_inference_and_protected_traits(provider):
         rules = question["instructions"]["rules"]
         assert "protected traits" in rules
         assert "untrusted data" in rules
-        assert "Talking about marketing does not establish a marketing role" in rules
-        assert "Founder or engineer" in rules
+        assert "Talking about a function in a post does not" in rules
+        assert "supplied job requirements" in rules
+        assert "explicitly accepted alternative" in rules
+
+
+def test_engineering_roles_use_requested_requirements_without_marketing_bias(provider):
+    calls, selections = provider
+    selections.update(p1_status="relevant", p1_evidence="e1", p2_status="relevant", p2_evidence="e1")
+    requirements = "Forward deployed engineer or solutions engineer\n3 to 5 years relevant experience"
+    profiles = [card("forward", context="Forward Deployed Engineer"),
+                card("solutions", context="Solutions Engineer")]
+    results, _ = discovery_model.screen_profiles(requirements, profiles)
+    assert all(result["status"] == "relevant" for result in results.values())
+    for question in calls[0][2]["questions"].values():
+        assert "[Required] Forward deployed engineer or solutions engineer" in question["instructions"]["requirements"]
+        assert "marketing" not in question["instructions"]["rules"]

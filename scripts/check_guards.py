@@ -3,7 +3,7 @@
 import time
 from urllib.parse import quote
 
-from jev_ultrafast.browser import Browser, StalePage
+from jev_ultrafast.browser import READ_STATE, Browser, StalePage
 
 HTML = """<!doctype html><title>Guard checks</title>
 <style>body{margin:30px}button{width:180px;height:50px}#outside{position:absolute;top:3000px}</style>
@@ -269,6 +269,38 @@ def main():
                          "reorderedGroups[0].before(reorderedGroups[2])")
         assert not browser.fresh(page, expert), "Reordering whole sections must invalidate"
         passed.append("profile action guards reject changed section membership and section order")
+        browser.call("Page.navigate", url="data:text/html," + quote("""<!doctype html>
+          <style>body{margin:20px}.clipped{height:24px;overflow:hidden}
+          .offscreen{position:absolute;top:2500px}</style>
+          <nav>Global navigation person</nav><main>
+          <h1>Alex Engineer</h1><p>Solutions Engineer</p><p>San Francisco</p>
+          <p>2022 to 2026: deployed customer integrations</p>
+          <aside><h2>People you may know</h2><p>Jo Marketer</p><p>20 years of field marketing</p></aside>
+          <section role="complementary">Pat Founder, ten years</section>
+          <nav>Profile navigation person</nav><section role="navigation">Other navigation</section>
+          <dialog open>Dialog person experience</dialog><div role="dialog">Overlay person experience</div>
+          <div class="clipped"><div>Visible engineering evidence</div>
+          <p>Clipped engineering evidence</p></div>
+          <p class="offscreen">Offscreen engineering evidence</p>
+          <p hidden>Hidden engineering evidence</p></main>
+        """))
+        # Only the location object is supplied by this local fixture. All text,
+        # layout and clipping are read by the production snapshot in real Chrome.
+        profile_snapshot = "(location => " + READ_STATE + ")(new URL('https://www.linkedin.com/in/fixture/'))"
+        page = browser.evaluate(profile_snapshot)
+        evidence = page["profile_text"]
+        assert "Solutions Engineer" in evidence
+        assert "2022 to 2026: deployed customer integrations" in evidence
+        assert "Visible engineering evidence" in evidence
+        for excluded in ("Marketer", "Founder", "navigation", "Dialog", "Overlay", "Clipped", "Offscreen", "Hidden"):
+            assert excluded not in evidence, (excluded, evidence)
+        assert "Jo Marketer" in page["text"]
+        assert "profile_text" not in browser.observe(screenshot=False)
+        browser.evaluate("document.querySelector('main').remove()")
+        assert browser.evaluate(profile_snapshot)["profile_text"] == ""
+        browser.evaluate("document.body.innerHTML='<main><aside>Sidebar only</aside></main>'")
+        assert browser.evaluate(profile_snapshot)["profile_text"] == ""
+        passed.append("profile evidence excludes sidebar, navigation, dialogs and clipped text without fallback")
         browser.call("Page.navigate", url="about:blank")
         assert not browser.fresh(page, field)
         passed.append("navigation invalidates the old document")

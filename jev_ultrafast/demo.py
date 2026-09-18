@@ -51,7 +51,9 @@ def recruiting_command(name, body):
         # Construct successfully before replacing the previous run and its review queue.
         replacement = Recruiter(
             requirements, max_profiles=max_profiles, max_scrolls=max_scrolls,
-            search_query=body.get("search_query", "field marketing San Francisco"),
+            target_matches=body.get("target_matches"),
+            max_profile_scrolls=body.get("max_profile_scrolls", 2),
+            search_query=body.get("search_query", '"forward deployed engineer" OR "solutions engineer" San Francisco'),
         )
         if RECRUITER:
             RECRUITER.close()

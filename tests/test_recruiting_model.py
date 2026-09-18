@@ -51,7 +51,7 @@ def test_one_jev_call_with_status_and_indexed_quote_heads(provider):
     calls, selections = provider
     selections.update(c1_status="met", c1_evidence="e1", c2_status="not_met", c2_evidence="e2")
     criteria = ["[Required] Event experience", "[Preferred] B2B experience"]
-    evidence = ["  I run marketing events.\nMy work has exclusively been B2C."]
+    evidence = ["  I run marketing events.", "My work has exclusively been B2C."]
     output, metadata = recruiting_model.assess(criteria, evidence, "https://www.linkedin.com/in/example/")
     assert len(calls) == 1
     url, key, body = calls[0]
@@ -92,12 +92,48 @@ def test_fabricated_evidence_target_fails_validation(provider):
 
 
 def test_excerpt_selection_is_bounded_and_verbatim():
-    evidence = ["\n".join(f"Observed line {i}" for i in range(150)), "x" * 2001]
+    evidence = ["\n".join(f"Observed line {i}" for i in range(4000)), "x" * 2001]
     excerpts = recruiting_model.evidence_choices(evidence)
     assert len(excerpts) == 50
     assert all(any(quote in text for text in evidence) for quote in excerpts.values())
-    assert excerpts["e1"] == "Observed line 0"
-    assert excerpts["e50"] == "x"
+    assert excerpts["e1"].startswith("Observed line 0\nObserved line 1")
+    assert any("x" * 1000 == quote for quote in excerpts.values())
+    assert all(len(quote) <= 1000 for quote in excerpts.values())
+
+
+def test_dated_role_context_survives_long_activity_and_observation_boundaries():
+    role = "Solutions Engineer\nExample Company\nJan 2022 to Dec 2025\nSan Francisco Bay Area"
+    evidence = ["Jordan Example\nForward Deployed Engineer\nSan Francisco Bay Area\n" +
+                "\n".join(f"Activity item {i}" for i in range(4000)),
+                "Experience\n" + role + "\n" + "\n".join(f"Skill {i}" for i in range(3000))]
+    excerpts = recruiting_model.evidence_choices(evidence)
+    assert len(excerpts) == 50
+    assert any("Jordan Example\nForward Deployed Engineer\nSan Francisco Bay Area" in q for q in excerpts.values())
+    assert any(role in q for q in excerpts.values())
+    assert all(any(q in text for text in evidence) for q in excerpts.values())
+
+
+def test_overlapping_windows_preserve_title_with_dates():
+    role = "Solutions Engineer\nExample Company\nJan 2022 to Present"
+    for padding in (800, 900, 990, 1000, 1400):
+        text = "x" * padding + "\n" + role + "\n" + "y" * 1500
+        excerpts = recruiting_model.evidence_choices([text])
+        assert any(role in q for q in excerpts.values())
+
+
+def test_assessment_supplies_current_date_and_conservative_duration_rules(provider):
+    from datetime import datetime, timezone
+
+    calls, _ = provider
+    recruiting_model.assess(["3 to 5 years relevant experience"],
+                            ["Solutions Engineer\nJan 2022 to Present"], "observed profile")
+    body = calls[0][2]
+    assert body['state']['assessment_date_utc'] == datetime.now(timezone.utc).date().isoformat()
+    for question in body['questions'].values():
+        rules = question['instructions']['rules']
+        assert 'union of overlapping periods' in rules
+        assert 'incomplete relevant work history mean unknown' in rules
+        assert 'Do not count education or unrelated roles' in rules
 
 
 def test_missing_key_does_not_call_provider(monkeypatch, provider):

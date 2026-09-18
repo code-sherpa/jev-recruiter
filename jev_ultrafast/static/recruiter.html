@@ -4,53 +4,60 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <meta name="demo-token" content="__TOKEN__" />
-  <title>Jev Recruiter · Field marketing</title>
+  <title>jevlist: san francisco engineering talent</title>
   <link rel="stylesheet" href="/recruiter.css" />
 </head>
 <body>
-  <header class="topbar">
-    <a class="brand" href="/" aria-label="Jev Recruiter home"><span class="brand-mark" aria-hidden="true">j.</span> jev <span class="brand-light">recruiter</span></a>
-    <span class="local-label"><span class="dot"></span> Jev × Browser Use Browser Harness</span>
-  </header>
+<div class="site-layout">
+  <aside class="leftbar">
+    <a class="brand" href="/">jevlist</a>
+    <p class="brand-caption">recruiting with jev</p>
+    <nav class="left-links"><a href="#brief-form">create a search</a><a href="#candidates-heading">saved profiles</a><a href="#activity">session history</a></nav>
+    <form id="brief-form">
+      <label for="search-query">search people</label>
+      <input id="search-query" type="text" value="&quot;forward deployed engineer&quot; OR &quot;solutions engineer&quot; San Francisco" maxlength="200" required />
+      <details id="role-settings"><summary>job requirements</summary>
+        <label for="requirements">role, experience &amp; location</label>
+        <textarea id="requirements" required minlength="10" maxlength="12000" rows="12" aria-describedby="requirements-hint"></textarea>
+        <p id="requirements-hint">One criterion per line, up to 20. Begin optional criteria with Preferred:.</p>
+      </details>
+      <label for="target-matches">matches to find</label>
+      <input id="target-matches" type="number" min="1" max="50" value="10" required />
+      <details class="limits"><summary>search limits</summary>
+        <label for="max-profiles">profiles to review</label><input id="max-profiles" type="number" min="1" max="50" value="50" required />
+        <label for="max-scrolls">discovery scrolls</label><input id="max-scrolls" type="number" min="1" max="100" value="100" required />
+      </details>
+      <button id="start" type="submit">start search</button>
+      <p id="new-run-note" hidden>Starting again replaces this session. Export your results first.</p>
+    </form>
+    <div class="sidebar-note"><a href="#how-it-works">about this search</a><p>Jev only.<br />Your Chrome session.<br />Your final decision.</p></div>
+    <p class="sidebar-bottom">san francisco bay area<br />personal recruiting workspace</p>
+  </aside>
   <main>
-    <section class="intro">
-      <div><p class="eyebrow">JEV · LINKEDIN SOURCING WORKSPACE</p><h1>Your next great hire<br />starts with the right person.</h1><p class="intro-copy">Jev finds field marketers, then explores similar profiles. Review the evidence.<br class="desktop-break" /> Build a shortlist with your own judgment.</p></div>
-      <div class="intro-note"><span class="note-symbol" aria-hidden="true">↗</span><p>From a relevant profile<br />to a promising conversation.</p><span>Discovery comes first.</span></div>
-    </section>
-    <div class="workspace">
-      <aside class="brief-panel">
-        <form id="brief-form">
-          <div class="section-heading"><span class="section-number">01</span><h2>The brief</h2></div>
-          <label class="field-label" for="requirements">What makes a great field marketer?</label>
-          <p class="field-hint" id="requirements-hint">Edit this draft for your San Francisco role. Use one criterion per line, up to 20. Begin optional criteria with Preferred:.</p>
-          <textarea id="requirements" name="requirements" required minlength="10" maxlength="12000" rows="9" aria-describedby="requirements-hint" placeholder="Describe your field marketing role…&#10;&#10;Consider event ownership, audience, industry, campaign measurement, location, and travel requirements."></textarea>
-          <label class="field-label" for="search-query">Starting search</label>
-          <input class="discovery-input" id="search-query" type="text" value="field marketing San Francisco" maxlength="200" required />
-          <p class="field-hint">Start with a relevant marketer, then explore the second and third profile sections in the right sidebar. The first section is skipped. Jev checks each visible title before opening a profile.</p>
-          <div class="budget-row"><label for="max-profiles">Profile limit<input id="max-profiles" name="max_profiles" type="number" min="1" max="50" value="10" required /></label><label for="max-scrolls">Discovery scroll limit<input id="max-scrolls" name="max_scrolls" type="number" min="1" max="100" value="10" required /></label></div>
-          <button class="primary start-button" id="start" type="submit">Start sourcing <span aria-hidden="true">↗</span></button>
-          <p class="new-run-note" id="new-run-note" hidden>Starting again replaces this session. Export your results first to keep a copy.</p>
-        </form>
-        <div class="setup-note"><h3>Before you begin</h3><p>Sign into LinkedIn in Chrome connected through Browser Use Browser Harness. Set <code>TYPESAFE_API_KEY</code> in <code>.env</code>.</p><p>Jev is the only model. It chooses browser actions and checks visible evidence. You make the shortlist decisions.</p></div>
-      </aside>
-      <section class="session-panel" aria-labelledby="session-heading">
-        <div class="session-heading"><div class="section-heading"><span class="section-number">02</span><h2 id="session-heading">The discovery</h2></div><span class="session-badge" id="session-badge">NOT STARTED</span></div>
-        <div class="stats"><div><strong id="discovered-count">0</strong><span>Discovered</span></div><div><strong id="reviewed-count">0</strong><span>Profiles assessed</span></div><div><strong id="shortlist-count">0</strong><span>Your shortlist</span></div><div><strong id="scroll-count">0</strong><span>Discovery scrolls</span></div></div>
-        <div class="browser-panel"><div class="browser-bar"><div class="traffic" aria-hidden="true"><b></b><b></b><b></b></div><span id="browser-url">Your LinkedIn search will appear here</span><span class="observation-label">OBSERVED PAGE</span></div><div class="viewport"><div class="browser-empty" id="browser-empty"><span class="empty-icon" aria-hidden="true">↗</span><h3>A little browsing.<br />A lot of possibility.</h3><p>Add your brief, then start sourcing to open<br />a relevant LinkedIn search in Chrome.</p></div><img id="screenshot" alt="Latest observed page in the recruiting browser" hidden /></div><div class="browser-footer"><span id="page-title">Waiting for your brief</span><span>Visible profile evidence</span></div></div>
-        <div class="run-toolbar"><div class="run-status"><span class="dot" id="status-dot"></span><span id="status" role="status" aria-live="polite">Ready when you are</span></div><div class="run-controls"><button type="button" id="step" disabled>Next step</button><button type="button" id="run" class="primary" disabled>Run discovery <span aria-hidden="true">▷</span></button><button type="button" id="pause" hidden>Pause</button><button type="button" id="close" class="quiet" disabled>End session</button></div></div>
-        <section class="decision-panel" aria-labelledby="decision-heading">
-          <div class="decision-heading"><h3 id="decision-heading">Inside Jev’s decision</h3><span id="model-calls">0 model calls</span></div>
-          <p class="decision-empty" id="decision-empty">Run a step to see Jev’s actual choice and response timing.</p>
-          <dl class="decision-metrics" id="decision-metrics" hidden></dl>
-          <div class="decision-distribution" id="decision-distribution" hidden></div>
-        </section>
-        <div id="error" role="alert" hidden></div>
-      </section>
+    <header class="city-header"><h1>san francisco bay area</h1><span id="session-badge">NOT STARTED</span></header>
+    <nav class="area-nav" aria-label="Workspace navigation"><a href="#candidates-heading">people</a><a href="#role-settings">engineering</a><a href="#live-browser">live browser</a><a href="#activity">activity</a></nav>
+    <div class="directory">
+      <section><h2><a href="#role-settings">engineering talent</a></h2><ul><li><a href="#role-settings">forward deployed engineers</a></li><li><a href="#role-settings">solutions engineers</a></li><li><a href="#brief-form">edit search &amp; requirements</a></li></ul></section>
+      <section><h2>search activity</h2><ul class="counts"><li><span>supported matches</span><strong id="qualified-count">0 / 10</strong></li><li><span>profiles found</span><strong id="discovered-count">0</strong></li><li><span>profiles assessed</span><strong id="reviewed-count">0</strong></li><li><span>shortlisted</span><strong id="shortlist-count">0</strong></li><li><span>discovery scrolls</span><strong id="scroll-count">0</strong></li></ul></section>
+      <section id="how-it-works"><h2>how it works</h2><ul><li>start with a relevant title</li><li>use sidebar sections two &amp; three</li><li>skip the first sidebar section</li><li>save profile links &amp; evidence</li><li>review before shortlisting</li></ul></section>
     </div>
-    <section class="candidates-section" aria-labelledby="candidates-heading"><div class="candidates-heading"><div><p class="eyebrow">PEOPLE, WITH CONTEXT</p><h2 id="candidates-heading">Your discoveries <span id="candidate-count">0</span></h2></div><button type="button" id="export" disabled>Export results <span aria-hidden="true">↓</span></button></div><div class="filter-row"><div class="filters" aria-label="Filter discoveries"><button type="button" data-filter="all" aria-pressed="true">All people</button><button type="button" data-filter="potential_match" aria-pressed="false">Potential matches</button><button type="button" data-filter="needs_review" aria-pressed="false">Needs review</button><button type="button" data-filter="shortlisted" aria-pressed="false">Shortlisted</button><button type="button" data-filter="passed" aria-pressed="false">Passed</button></div><span class="human-note">Evidence informs. You decide.</span></div><div id="candidates"><div class="candidates-empty"><span aria-hidden="true">◎</span><h3>A shortlist starts with discovery.</h3><p>People from searches and similar profile recommendations will appear here with<br class="desktop-break" /> profile evidence, criteria checks, and gaps to follow up on.</p></div></div></section>
-    <details class="activity"><summary>Session activity <span id="activity-count">0 steps</span></summary><ol id="history"><li>No browser actions yet.</li></ol></details>
-    <footer><span>Jev Recruiter <span class="footer-dot">·</span> Jev × Browser Use Browser Harness</span><span>Personal sourcing workspace</span></footer>
+    <section class="session-panel" aria-label="Browsing controls">
+      <div class="run-toolbar"><span id="status" role="status" aria-live="polite">ready when you are</span><div class="run-controls"><button type="button" id="step" disabled>next step</button><button type="button" id="run" disabled>run discovery</button><button type="button" id="pause" hidden>pause</button><button type="button" id="close" disabled>end session</button></div></div>
+      <div id="error" role="alert" hidden></div>
+      <details id="live-browser" class="live-browser"><summary>live browser <span id="page-title">waiting for your search</span></summary>
+        <div class="browser-panel"><div id="browser-url">Your LinkedIn search will appear here</div><div class="viewport"><div id="browser-empty"><h3>no browsing session yet</h3><p>start a search to follow Jev in Chrome</p></div><img id="screenshot" alt="Latest observed page in the recruiting browser" hidden /></div></div>
+      </details>
+      <details class="decision-panel"><summary>inside jev’s decision <span id="model-calls">0 model calls</span></summary><p id="decision-empty">Run a step to see Jev’s choice and response timing.</p><dl id="decision-metrics" hidden></dl><div id="decision-distribution" hidden></div></details>
+    </section>
+    <section class="candidates-section" aria-labelledby="candidates-heading">
+      <div class="list-heading"><h2 id="candidates-heading">people found <span id="candidate-count">0</span></h2><button type="button" id="export" disabled>export results</button></div>
+      <div class="filters" aria-label="Filter discoveries"><button type="button" data-filter="all" aria-pressed="true">all people</button><button type="button" data-filter="potential_match" aria-pressed="false">potential matches</button><button type="button" data-filter="needs_review" aria-pressed="false">needs review</button><button type="button" data-filter="shortlisted" aria-pressed="false">shortlisted</button><button type="button" data-filter="passed" aria-pressed="false">passed</button></div>
+      <div id="candidates"><p class="candidates-empty">no profiles saved yet. start a search to find people.</p></div>
+    </section>
+    <details id="activity" class="activity"><summary>session history <span id="activity-count">0 steps</span></summary><ol id="history"><li>No browser actions yet.</li></ol></details>
+    <footer><span>© jevlist</span><a href="#how-it-works">about</a><a href="#brief-form">search settings</a><span>Jev × Browser Use Browser Harness</span></footer>
   </main>
-  <script type="module" src="/recruiter.js"></script>
+</div>
+<script type="module" src="/recruiter.js"></script>
 </body>
 </html>
