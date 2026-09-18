@@ -384,3 +384,24 @@ def test_screening_cache_reused_after_stale_link(prepared, monkeypatch):
     prepared.command('tick')
     assert sum(h['action'] == 'Requested Jev title relevance screening' for h in prepared.history) == 1
     assert sum(h['action'] == 'Requested Jev browser decision' for h in prepared.history) == 2
+
+
+def test_duplicate_profile_anchors_offer_one_observed_target_with_title(prepared, monkeypatch):
+    prepared.command('tick')
+    observed = prepared.feed.observe()
+    monkeypatch.setattr(prepared.feed, 'observe', lambda **kwargs: observed)
+    original_actions = [dict(a) for a in observed['actions']]
+
+    def choose(page, goal, history):
+        clicks = [a for a in page['actions'] if a['kind'] == 'click']
+        assert len(clicks) == 1
+        assert clicks[0]['id'] == 'e2'
+        assert 'Field Marketing Manager' in clicks[0]['label']
+        assert clicks[0]['node'] == original_actions[1]['node']
+        assert observed['actions'] == original_actions
+        return decision(clicks[0]['id'], 'CLICK')
+
+    monkeypatch.setattr(recruiter, 'choose', choose)
+    state = prepared.command('tick')
+    assert state['status'] == 'running'
+    assert prepared.current['profile_url'] == 'https://www.linkedin.com/in/alice/'

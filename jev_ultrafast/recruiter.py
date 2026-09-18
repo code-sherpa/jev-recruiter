@@ -231,7 +231,8 @@ class Recruiter:
                 cards[url] = card
             if url not in self.seen:
                 self.seen.add(url)
-                self.discoveries.append({"profile_url": url, "discovered_from": page["url"],
+                self.discoveries.append({"profile_url": url, "name": card["label"],
+                                         "discovered_from": page["url"],
                                          "source_context": card["context"], "relevance": {"status": "pending"}})
                 self._log("Saved discovered profile link", profile_url=url)
         pending = [c for c in cards.values() if (c["profile_url"], c["context"]) not in self.screen_cache]
@@ -249,7 +250,7 @@ class Recruiter:
         for url, card in cards.items():
             result = self.screen_cache[(url, card["context"])]
             discovery = next(d for d in self.discoveries if d["profile_url"] == url)
-            discovery.update(source_context=card["context"], relevance=result)
+            discovery.update(name=card["label"], source_context=card["context"], relevance=result)
             if result["status"] == "relevant" and result.get("quote") and result["quote"] in card["context"]:
                 eligible.add(url)
         self.queue = [{"profile_url": url} for url in eligible]
@@ -287,20 +288,43 @@ class Recruiter:
                     return
             source["rewind"] = 0
         eligible, cards = self._screen(page, source)
-        actions = [a for a in page["actions"] if (
-            a["kind"] == "click" and profile_url(a.get("href")) in eligible
-            and (not source["url"] or a.get("region") == "sidebar")
-        ) or (a["kind"] == "scroll" and a.get("delta", 0) > 0 and self.feed_scrolls < self.max_scrolls)
-            or a["kind"] == "wait"]
+        # Image and name anchors often point to the same person. Offer one real
+        # observed target per canonical URL, with its visible title beside its name.
+        profile_actions = {}
+        controls = []
+
+        def richness(action):
+            return len(action.get("context", "")), len(action.get("label", ""))
+
+        for action in page["actions"]:
+            url = profile_url(action.get("href"))
+            if (action["kind"] == "click" and url in eligible
+                    and (not source["url"] or action.get("region") == "sidebar")):
+                previous = profile_actions.get(url)
+                if previous is None or richness(action) > richness(previous):
+                    profile_actions[url] = action
+            elif ((action["kind"] == "scroll" and action.get("delta", 0) > 0
+                   and self.feed_scrolls < self.max_scrolls) or action["kind"] == "wait"):
+                controls.append(action)
+        actions = []
+        for url, action in profile_actions.items():
+            context = cards[url]["context"]
+            label = action.get("label", "")
+            if context and context not in label:
+                label = label + "\n" + context
+            actions.append({**action, "label": label})
+        actions.extend(controls)
         if not any(a["kind"] != "wait" for a in actions):
             self.sources.pop()
             browser.close()
             self.message = "Finished this source. Returning to the previous relevant profile."
             return
         selected = self._choose(page, actions,
-            "Open a relevant person's profile to inspect professional experience for this job: " +
-            self.requirements + ". Offered profile links passed Jev's professional title screening. "
-            "Prefer the closest field or event marketing title over adjacent marketing functions. "
+            "This step only chooses which already title screened profile to read. "
+            "Do not require a profile to meet every job requirement; qualification assessment happens after the visit. "
+            "Offered profile links passed Jev's professional title screening for the starting search: " +
+            self.search_query + ". Prefer the closest field or event marketing title "
+            "over adjacent marketing functions. "
             "Prioritize CLICK on a relevant right sidebar recommendation when offered, otherwise a relevant "
             "search result. If no relevant profile is visible, SCROLL_DOWN to reveal more. "
             "Never open unrelated founders or engineers. Never send messages or interact socially.")

@@ -28,20 +28,25 @@ def post_json(url, key, body):
 
 
 def validate_choice(answer, ids):
+    reason = None
     try:
         probabilities = answer["probabilities"]
         numbers = [*probabilities.values(), answer["confidence"]]
-        valid = (
-            answer["choice"] in ids
-            and set(probabilities) == set(ids)
-            and all(type(n) in (int, float) and math.isfinite(n) and 0 <= n <= 1 for n in numbers)
-            and abs(sum(probabilities.values()) - 1) < 0.02
-            and probabilities[answer["choice"]] >= max(probabilities.values()) - 1e-6
-        )
-    except (KeyError, TypeError, ValueError):
-        valid = False
-    if not valid:
-        raise ValueError("Invalid TypeSafe response; no action executed.")
+        if answer["choice"] not in ids:
+            reason = "choice is not an offered option"
+        elif set(probabilities) != set(ids):
+            reason = "probability options differ from offered options"
+        elif not all(type(n) in (int, float) and math.isfinite(n) and 0 <= n <= 1 for n in numbers):
+            reason = "probabilities or confidence are invalid"
+        elif abs(sum(probabilities.values()) - 1) >= 0.02:
+            reason = "probabilities do not sum to one"
+        elif probabilities[answer["choice"]] < max(probabilities.values()) - 1e-6:
+            reason = "choice differs from the highest probability option"
+    except (KeyError, TypeError, ValueError, AttributeError):
+        reason = "required choice fields are missing or malformed"
+    if reason:
+        # Report a code owned diagnosis without echoing arbitrary provider data.
+        raise ValueError(f"Invalid TypeSafe response: {reason}; no action executed.")
     return answer
 
 
