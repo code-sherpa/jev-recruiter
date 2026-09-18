@@ -301,7 +301,7 @@ def test_relevant_seed_then_sidebar_only_with_hard_title_gate(prepared, monkeypa
     observed = []
 
     def card(slug, title, region='main'):
-        return {'id': slug, 'kind': 'click', 'label': slug, 'region': region,
+        return {'id': slug, 'kind': 'click', 'label': slug, 'region': region, 'sidebar_section_index': 2,
                 'context': f'{slug}\n{title}', 'href': f'https://www.linkedin.com/in/{slug}/'}
 
     def observe(browser, screenshot=True):
@@ -405,3 +405,40 @@ def test_duplicate_profile_anchors_offer_one_observed_target_with_title(prepared
     state = prepared.command('tick')
     assert state['status'] == 'running'
     assert prepared.current['profile_url'] == 'https://www.linkedin.com/in/alice/'
+
+
+@pytest.mark.parametrize("index", [1, 4, None, "2", True])
+def test_first_and_unidentified_sidebar_sections_never_open(prepared, monkeypatch, index):
+    prepared.command('tick')
+    browser = prepared.feed
+    prepared.sources = [{"browser": browser, "url": "https://www.linkedin.com/in/source/", "rewind": 0}]
+    browser.url = "https://www.linkedin.com/in/source/"
+    action = {'id': 'coworker', 'kind': 'click', 'label': 'Relevant coworker',
+              'href': 'https://www.linkedin.com/in/coworker/', 'region': 'sidebar',
+              'context': 'Field Marketing Manager', 'sidebar_section_index': index}
+    monkeypatch.setattr(browser, 'observe', lambda **kwargs: {
+        'url': browser.url, 'text': '', 'actions': [action, {'id': 'down', 'kind': 'scroll', 'delta': 560}]})
+    monkeypatch.setattr(recruiter, 'screen_profiles', lambda *a: pytest.fail('Excluded section screened'))
+    state = prepared.command('tick')
+    assert state['status'] == 'running'
+    assert browser.actions[-1]['kind'] == 'scroll'
+    assert prepared.current is None
+    assert len(FakeBrowser.instances) == 1
+
+
+@pytest.mark.parametrize("index", [2, 3])
+def test_allowed_sidebar_section_provenance_saved(prepared, monkeypatch, index):
+    prepared.command('tick')
+    browser = prepared.feed
+    browser.url = "https://www.linkedin.com/in/source/"
+    prepared.sources = [{"browser": browser, "url": browser.url, "rewind": 0}]
+    action = {'id': 'marketer', 'kind': 'click', 'label': 'Alice',
+              'href': 'https://www.linkedin.com/in/alice/', 'region': 'sidebar',
+              'context': 'Field Marketing Manager', 'sidebar_section_index': index,
+              'sidebar_section_title': 'People you may know'}
+    monkeypatch.setattr(browser, 'observe', lambda **kwargs: {'url': browser.url, 'text': '', 'actions': [action]})
+    prepared.command('tick')
+    assert prepared.current['sidebar_section_index'] == index
+    saved = json.loads(prepared.path.read_text())
+    assert saved['discoveries'][0]['sidebar_section_index'] == index
+    assert saved['discoveries'][0]['sidebar_section_title'] == 'People you may know'

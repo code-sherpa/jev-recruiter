@@ -32,6 +32,12 @@ def profile_url(value):
     return "https://www.linkedin.com" + parsed.path.rstrip("/") + "/"
 
 
+def eligible_sidebar(action):
+    """Only the second and third observed profile groups may supply recommendations."""
+    index = action.get("sidebar_section_index")
+    return action.get("region") == "sidebar" and type(index) is int and index in {2, 3}
+
+
 def validate_assessment(output, criteria, evidence):
     """Require full rubric coverage and verbatim support for every nonunknown finding."""
     items = output.get("criteria") if isinstance(output, dict) else None
@@ -221,19 +227,23 @@ class Recruiter:
             url = profile_url(action.get("href"))
             if action["kind"] != "click" or not url or url in self.visited:
                 continue
-            if source["url"] and action.get("region") != "sidebar":
+            if source["url"] and not eligible_sidebar(action):
                 continue
             if action.get("region") == "navigation":
                 continue
             card = {"profile_url": url, "label": action.get("label", ""),
-                    "context": action.get("context", ""), "source_kind": "sidebar" if source["url"] else "search"}
+                    "context": action.get("context", ""), "source_kind": "sidebar" if source["url"] else "search",
+                    "sidebar_section_index": action.get("sidebar_section_index"),
+                    "sidebar_section_title": action.get("sidebar_section_title", "")}
             if url not in cards or len(card["context"]) > len(cards[url]["context"]):
                 cards[url] = card
             if url not in self.seen:
                 self.seen.add(url)
                 self.discoveries.append({"profile_url": url, "name": card["label"],
                                          "discovered_from": page["url"],
-                                         "source_context": card["context"], "relevance": {"status": "pending"}})
+                                         "source_context": card["context"], "relevance": {"status": "pending"},
+                                         "sidebar_section_index": card["sidebar_section_index"],
+                                         "sidebar_section_title": card["sidebar_section_title"]})
                 self._log("Saved discovered profile link", profile_url=url)
         pending = [c for c in cards.values() if (c["profile_url"], c["context"]) not in self.screen_cache]
         for start in range(0, len(pending), 30):
@@ -299,7 +309,7 @@ class Recruiter:
         for action in page["actions"]:
             url = profile_url(action.get("href"))
             if (action["kind"] == "click" and url in eligible
-                    and (not source["url"] or action.get("region") == "sidebar")):
+                    and (not source["url"] or eligible_sidebar(action))):
                 previous = profile_actions.get(url)
                 if previous is None or richness(action) > richness(previous):
                     profile_actions[url] = action
@@ -325,8 +335,10 @@ class Recruiter:
             "Offered profile links passed Jev's professional title screening for the starting search: " +
             self.search_query + ". Prefer the closest field or event marketing title "
             "over adjacent marketing functions. "
-            "Prioritize CLICK on a relevant right sidebar recommendation when offered, otherwise a relevant "
-            "search result. If no relevant profile is visible, SCROLL_DOWN to reveal more. "
+            "Prioritize CLICK on a relevant recommendation from sidebar profile section two or three when offered, "
+            "otherwise a relevant "
+            "search result. The first sidebar profile section is excluded. "
+            "If no eligible profile is visible, SCROLL_DOWN past the first section to reveal sections two and three. "
             "Never open unrelated founders or engineers. Never send messages or interact socially.")
         if selected in {"DONE", "BLOCKED"}:
             self.sources.pop()
@@ -343,6 +355,8 @@ class Recruiter:
             card = cards[url]
             self.current = {"profile_url": url, "name": card["label"][:300],
                             "discovered_from": page["url"], "source_context": card["context"],
+                            "sidebar_section_index": card["sidebar_section_index"],
+                            "sidebar_section_title": card["sidebar_section_title"],
                             "relevance": self.screen_cache[(url, card["context"])],
                             "evidence": [], "review": "unreviewed"}
             self.profile = Browser(url, **self.viewport)

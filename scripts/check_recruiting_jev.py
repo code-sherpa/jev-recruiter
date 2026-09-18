@@ -16,6 +16,7 @@ from jev_ultrafast.browser import Browser
 SEED = "https://www.linkedin.com/in/jev-synthetic-field-marketer/"
 SIMILAR = "https://www.linkedin.com/in/jev-synthetic-event-marketer/"
 ENGINEER = "https://www.linkedin.com/in/jev-synthetic-engineer/"
+COWORKER = "https://www.linkedin.com/in/jev-synthetic-coworker/"
 FOUNDER = "https://www.linkedin.com/in/jev-synthetic-founder/"
 REQUIREMENTS = "Required: Owns B2B field marketing events\nRequired: Based in San Francisco"
 
@@ -38,10 +39,12 @@ class Fixture(BaseHTTPRequestHandler):
                 '<main><h1>Taylor Example</h1><h2>B2B Field Marketing Manager</h2>'
                 '<p>Based in San Francisco.</p><p>I own B2B field marketing events.</p>'
                 '<p>This is synthetic test data, not a real candidate.</p></main>'
-                '<aside><h2>People also viewed</h2><ul>'
+                '<aside><section><h2>More profiles for you</h2><ul>'
+                + person_card(COWORKER, "Casey Coworker", "B2B Field Marketing Manager at Example")
+                + '</ul></section><section><h2>People you may know</h2><ul>'
                 + person_card(FOUNDER, "Jordan Example", "Founder and Software Engineer at Example")
                 + person_card(SIMILAR, "Morgan Example", "B2B Field and Event Marketing Manager at Example")
-                + '</ul></aside>'
+                + '</ul></section></aside>'
             )
         elif self.path == "/similar/":
             content = (
@@ -117,7 +120,8 @@ def main():
             saved_urls = {item["profile_url"] for item in persisted["discoveries"]}
             assert {SEED, SIMILAR} <= saved_urls
             assert persisted["candidates"][0]["review"] == "shortlisted"
-            assert ENGINEER not in opened and FOUNDER not in opened
+            assert ENGINEER not in opened and FOUNDER not in opened and COWORKER not in opened
+            assert similar["sidebar_section_index"] == 2
             print(json.dumps({
                 "verification": "Synthetic fixture, real Browser Harness and Jev, no LinkedIn account",
                 "model": similar["assessment"]["model"], "model_calls": state["counts"]["model_calls"],

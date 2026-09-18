@@ -214,6 +214,61 @@ def main():
         assert "Invisible" not in page["text"]
         assert not any("/in/hidden/" in a["href"] for a in links)
         passed.append("profile card headlines stay with their person and exclude hidden and post text")
+        browser.call("Page.navigate", url="data:text/html," + quote("""<!doctype html>
+          <style>body{margin:0;height:2600px}main{width:550px}
+          aside{position:absolute;left:650px;top:0;width:300px}
+          .group{min-height:430px}.card{height:65px}</style>
+          <main>Main profile</main><aside>
+          <div class="group"><div><h3>More profiles for you</h3></div>
+            <div class="card"><a href="https://www.linkedin.com/in/colleague/">Pat Colleague</a>
+            <p>Field Marketing Manager</p></div></div>
+          <section><h2>Advertisement</h2><a href="https://example.com">An ad</a></section>
+          <div role="dialog" hidden><h2>Ad Options</h2>
+            <a href="https://www.linkedin.com/in/hidden-ad/">Hidden ad profile</a></div>
+          <div class="group"><div><h2>Get expert advice</h2></div>
+            <div class="card"><a href="https://www.linkedin.com/in/expert/">Alex Expert</a>
+            <p>Marketing Advisor</p></div></div>
+          <section class="group"><header><h2>People you may know</h2></header>
+            <div class="card"><a href="https://www.linkedin.com/in/peer/">Jo Peer</a>
+            <p>Regional Field Marketing Manager</p></div></section>
+          <section><h2>You might like</h2><a href="https://www.linkedin.com/company/example/">Example</a></section>
+          <div><a href="https://www.linkedin.com/in/ungrouped/">Unclassified Person</a></div>
+          </aside>
+        """))
+        page = browser.observe(screenshot=False)
+        colleague = next(a for a in page["actions"] if "/in/colleague/" in a.get("href", ""))
+        assert colleague["sidebar_section_index"] == 1
+        assert colleague["sidebar_section_title"] == "More profiles for you"
+        browser.evaluate("scrollTo(0,450)")
+        page = browser.observe(screenshot=False)
+        expert = next(a for a in page["actions"] if "/in/expert/" in a.get("href", ""))
+        peer = next(a for a in page["actions"] if "/in/peer/" in a.get("href", ""))
+        assert expert["sidebar_section_index"] == 2
+        assert expert["sidebar_section_title"] == "Get expert advice"
+        assert peer["sidebar_section_index"] == 3
+        assert peer["sidebar_section_title"] == "People you may know"
+        assert not any("/in/colleague/" in a.get("href", "") for a in page["actions"])
+        assert "Pat Colleague" not in page["text"]
+        browser.evaluate("scrollTo(0,900)")
+        page = browser.observe(screenshot=False)
+        peer = next(a for a in page["actions"] if "/in/peer/" in a.get("href", ""))
+        ungrouped = next(a for a in page["actions"] if "/in/ungrouped/" in a.get("href", ""))
+        assert peer["sidebar_section_index"] == 3
+        assert "sidebar_section_index" not in ungrouped
+        passed.append("sidebar section positions survive scrolling and exclude ads and unknown groups")
+        browser.evaluate("scrollTo(0,0)")
+        page = browser.observe(screenshot=False)
+        expert = next(a for a in page["actions"] if "/in/expert/" in a.get("href", ""))
+        browser.evaluate("const groups=document.querySelectorAll('.group'); "
+                         "groups[0].append(groups[1].querySelector('.card'))")
+        assert not browser.fresh(page, expert), "Moving a card into another section must invalidate"
+        page = browser.observe(screenshot=False)
+        expert = next(a for a in page["actions"] if "/in/expert/" in a.get("href", ""))
+        assert expert["sidebar_section_index"] == 1
+        browser.evaluate("const reorderedGroups=document.querySelectorAll('.group'); "
+                         "reorderedGroups[0].before(reorderedGroups[2])")
+        assert not browser.fresh(page, expert), "Reordering whole sections must invalidate"
+        passed.append("profile action guards reject changed section membership and section order")
         browser.call("Page.navigate", url="about:blank")
         assert not browser.fresh(page, field)
         passed.append("navigation invalidates the old document")

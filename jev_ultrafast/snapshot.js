@@ -55,6 +55,37 @@
       return path ? u.origin+'/in/'+path[1].toLowerCase() : null;
     } catch { return null; }
   };
+  const region = e => {
+    const r=e.getBoundingClientRect(),main=document.querySelector('main,[role="main"]');
+    const mainRect=main?.getBoundingClientRect();
+    return e.closest('nav,[role="navigation"]') ? 'navigation' :
+      e.closest('aside,[role="complementary"]') || (mainRect && r.left>=mainRect.right) ? 'sidebar' :
+      e.closest('main,[role="main"]') ? 'main' : 'unknown';
+  };
+  // Section positions describe rendered recommendation groups, including those
+  // above the viewport. Only the actions and person context below expose visible
+  // people. Counting all rendered headings keeps group numbers stable on scroll.
+  const readSidebarSections = () => {
+    const currentProfile=profileIdentity({href:location.href});
+    const sectionHeadings=[...document.querySelectorAll('h1,h2,h3,h4,h5,h6,[role="heading"]')]
+      .filter(h=>visible(h) && h.getBoundingClientRect().height>0 && region(h)==='sidebar' &&
+        !h.closest('a[href],dialog,[role="dialog"]') &&
+        ![...h.querySelectorAll('a[href]')].some(profileIdentity));
+    const sidebarSections=[];
+    for (const heading of sectionHeadings) {
+      for (let root=heading.parentElement;root && root!==document.body;root=root.parentElement) {
+        if (root.matches('aside,main,nav,[role="complementary"],[role="main"],[role="navigation"]')) break;
+        if (sectionHeadings.some(other=>other!==heading && root.contains(other))) break;
+        const profiles=[...root.querySelectorAll('a[href]')].filter(a=>profileIdentity(a));
+        if (!profiles.some(a=>profileIdentity(a)!==currentProfile && visible(a))) continue;
+        const title=name(heading).replace(/\s+/g,' ').trim();
+        if (title) sidebarSections.push({root,title,index:sidebarSections.length+1});
+        break;
+      }
+    }
+    return sidebarSections;
+  };
+  const sidebarSections=readSidebarSections();
   const linkContext = e => {
     const identity=profileIdentity(e);
     if (!identity) return {};
@@ -76,12 +107,10 @@
     const alternative=[...scope.querySelectorAll('a[href]')]
       .filter(a=>profileIdentity(a)===identity && visible(a) && clippedRect(a))
       .map(a=>visibleText(a)).sort((a,b)=>b.length-a.length)[0];
-    const r=e.getBoundingClientRect(),main=document.querySelector('main,[role="main"]');
-    const mainRect=main?.getBoundingClientRect();
-    const region=e.closest('nav,[role="navigation"]') ? 'navigation' :
-      e.closest('aside,[role="complementary"]') || (mainRect && r.left>=mainRect.right) ? 'sidebar' :
-      e.closest('main,[role="main"]') ? 'main' : 'unknown';
-    return {context,region,...(!visibleText(e) && alternative ? {label:alternative} : {})};
+    const section=sidebarSections.find(({root})=>root.contains(e));
+    return {context,region:region(e),
+      ...(section ? {sidebar_section_index:section.index,sidebar_section_title:section.title} : {}),
+      ...(!visibleText(e) && alternative ? {label:alternative} : {})};
   };
   const roles=['button','link','checkbox','radio','switch','tab','menuitem','menuitemradio',
     'option','gridcell','combobox','textbox','searchbox','spinbutton'];
@@ -140,13 +169,16 @@
     [...document.querySelectorAll('input,textarea,select')].filter(safe)
       .map(e=>[identity(e),e.value,e.checked,e.selectedIndex,e.disabled,e.readOnly]),
     scrollAreas.map(e=>[identity(e),e.isConnected,e.scrollLeft,e.scrollTop,e.scrollHeight,e.clientHeight])];
-  cache.guard=e=>{
+  cache.guard=(e,sections)=>{
     if (!e?.isConnected || !visible(e)) return null;
+    const section=profileIdentity(e) && region(e)==='sidebar' ?
+      (sections || readSidebarSections()).find(({root})=>root.contains(e)) : null;
     const scope=e.closest('form,dialog,[role="dialog"],article,li,tr,[role="row"]') || e.parentElement;
     return [identity(e),role(e),name(e),e.value??null,e.checked??null,e.selectedIndex??null,
       e.readOnly??null,e.matches(':disabled'),e.getAttribute('aria-disabled'),
       e.getAttribute('aria-expanded'),e.getAttribute('aria-checked'),e.getAttribute('aria-selected'),
-      e.getAttribute('href'),scope?.innerText?.slice(0,6000)||''];
+      e.getAttribute('href'),scope?.innerText?.slice(0,6000)||'',
+      section ? [identity(section.root),section.index,section.title] : null];
   };
   const actions=[];
   for (const e of document.querySelectorAll(selector)) {
@@ -178,7 +210,7 @@
   }
   const text=visibleText(document.body,6000,'\n');
   const page_key=cache.pageKey(), guards={};
-  for (const a of actions) if (!(a.node in guards)) guards[a.node]=cache.guard(cache.nodes.get(a.node));
+  for (const a of actions) if (!(a.node in guards)) guards[a.node]=cache.guard(cache.nodes.get(a.node),sidebarSections);
   // Compare meaning and identity. Geometry is always resolved and hit-tested just before input.
   const semantics=actions.map(({rect,...action})=>action);
   const marker=[performance.timeOrigin,location.href,scrollX,scrollY,innerWidth,innerHeight,
