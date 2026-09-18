@@ -36,19 +36,19 @@
   <main>
     <header class="city-header"><h1>san francisco bay area</h1><span id="session-badge">NOT STARTED</span></header>
     <nav class="area-nav" aria-label="Workspace navigation"><a href="#candidates-heading">people</a><a href="#role-settings">engineering</a><a href="#live-browser">live browser</a><a href="#activity">activity</a></nav>
+    <section class="session-panel" aria-label="Browsing controls">
+      <div class="run-toolbar"><span id="status" role="status" aria-live="polite">ready when you are</span><div class="run-controls"><button type="button" id="step" disabled>next step</button><button type="button" id="run" disabled>run discovery</button><button type="button" id="pause" hidden>pause</button><button type="button" id="close" disabled>end session</button></div></div>
+      <div id="error" role="alert" hidden></div>
+      <details id="live-browser" class="live-browser" open><summary>live browser <span id="page-title">waiting for your search</span></summary>
+        <div class="browser-panel"><div id="browser-url">Your LinkedIn search will appear here</div><div class="viewport"><div id="browser-empty"><h3>no browsing session yet</h3><p>start a search to follow Jev in Chrome</p></div><img id="screenshot" alt="Latest observed page in the recruiting browser" hidden /></div></div>
+      </details>
+      <details class="decision-panel"><summary>inside jev’s decision <span id="model-calls">0 model calls</span></summary><p id="decision-empty">Run a step to see Jev’s choice and response timing.</p><dl id="decision-metrics" hidden></dl><div id="decision-distribution" hidden></div></details>
+    </section>
     <div class="directory">
       <section><h2><a href="#role-settings">engineering talent</a></h2><ul><li><a href="#role-settings">forward deployed engineers</a></li><li><a href="#role-settings">solutions engineers</a></li><li><a href="#brief-form">edit search &amp; requirements</a></li></ul></section>
       <section><h2>search activity</h2><ul class="counts"><li><span>supported matches</span><strong id="qualified-count">0 / 10</strong></li><li><span>profiles found</span><strong id="discovered-count">0</strong></li><li><span>profiles assessed</span><strong id="reviewed-count">0</strong></li><li><span>shortlisted</span><strong id="shortlist-count">0</strong></li><li><span>discovery scrolls</span><strong id="scroll-count">0</strong></li></ul></section>
       <section id="how-it-works"><h2>how it works</h2><ul><li>start with a relevant title</li><li>use sidebar sections two &amp; three</li><li>skip the first sidebar section</li><li>save profile links &amp; evidence</li><li>review before shortlisting</li></ul></section>
     </div>
-    <section class="session-panel" aria-label="Browsing controls">
-      <div class="run-toolbar"><span id="status" role="status" aria-live="polite">ready when you are</span><div class="run-controls"><button type="button" id="step" disabled>next step</button><button type="button" id="run" disabled>run discovery</button><button type="button" id="pause" hidden>pause</button><button type="button" id="close" disabled>end session</button></div></div>
-      <div id="error" role="alert" hidden></div>
-      <details id="live-browser" class="live-browser"><summary>live browser <span id="page-title">waiting for your search</span></summary>
-        <div class="browser-panel"><div id="browser-url">Your LinkedIn search will appear here</div><div class="viewport"><div id="browser-empty"><h3>no browsing session yet</h3><p>start a search to follow Jev in Chrome</p></div><img id="screenshot" alt="Latest observed page in the recruiting browser" hidden /></div></div>
-      </details>
-      <details class="decision-panel"><summary>inside jev’s decision <span id="model-calls">0 model calls</span></summary><p id="decision-empty">Run a step to see Jev’s choice and response timing.</p><dl id="decision-metrics" hidden></dl><div id="decision-distribution" hidden></div></details>
-    </section>
     <section class="candidates-section" aria-labelledby="candidates-heading">
       <div class="list-heading"><h2 id="candidates-heading">people found <span id="candidate-count">0</span></h2><button type="button" id="export" disabled>export results</button></div>
       <div class="filters" aria-label="Filter discoveries"><button type="button" data-filter="all" aria-pressed="true">all people</button><button type="button" data-filter="potential_match" aria-pressed="false">potential matches</button><button type="button" data-filter="needs_review" aria-pressed="false">needs review</button><button type="button" data-filter="shortlisted" aria-pressed="false">shortlisted</button><button type="button" data-filter="passed" aria-pressed="false">passed</button></div>
