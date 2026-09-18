@@ -8,3 +8,6 @@ artifacts/
 *.egg-info/
 
 dist/
+
+# Clean upstream reference clone, maintained separately from this app.
+/jev-ultrafast/

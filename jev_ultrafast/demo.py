@@ -1,4 +1,4 @@
-"""Loopback-only inspector for the Jev browser agent."""
+"""Local Jev recruiting workspace using Browser Use Browser Harness."""
 
 import atexit
 import json
@@ -9,8 +9,6 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 
-from .agent import Agent
-from .questions import MAX_STEPS
 from .recruiter import Recruiter
 
 ROOT = Path(__file__).parent
@@ -18,7 +16,6 @@ PORT = int(os.environ.get("TYPESAFE_DEMO_PORT", "8766"))
 ORIGIN = f"http://127.0.0.1:{PORT}"
 TOKEN = secrets.token_urlsafe(32)
 LOCK = threading.Lock()
-AGENT = None
 RECRUITER = None
 
 
@@ -31,16 +28,8 @@ def load_environment():
                 os.environ.setdefault(key, value)
 
 
-def response_state():
-    state = AGENT.snapshot() if AGENT else {"page": None, "status": "idle", "history": [], "decision": None}
-    return {**state, "text_model": os.environ.get("TEXT_MODEL", "deepseek-chat"), "max_steps": MAX_STEPS}
-
-
 def close_browser():
-    global AGENT, RECRUITER
-    if AGENT:
-        AGENT.close()
-        AGENT = None
+    global RECRUITER
     if RECRUITER:
         RECRUITER.close()
         RECRUITER = None
@@ -76,32 +65,6 @@ def recruiting_command(name, body):
     return recruiting_state()
 
 
-def command(name, body):
-    global AGENT
-    if name == "reset":
-        scenario = body.get("scenario", "flights")
-        if scenario not in {"travel", "research", "flights"}:
-            raise ValueError("Unknown demo scenario")
-        goal = body.get("goal", "").strip()
-        if not goal or len(goal) > 2000:
-            raise ValueError("Enter 1–2,000 characters")
-        close_browser()
-        AGENT = Agent(
-            "https://www.google.com/travel/flights?hl=en"
-            if scenario == "flights"
-            else f"{ORIGIN}/fixture.html?scenario={scenario}",
-            goal,
-            screenshots=True,
-            record_dir=Path.cwd() / "artifacts" / "frames" if body.get("record") else None,
-        )
-        AGENT.state["scenario"] = scenario
-    else:
-        if AGENT is None:
-            raise ValueError("Start a demo first")
-        AGENT.command(name, body)
-    return response_state()
-
-
 class Handler(BaseHTTPRequestHandler):
     def send(self, status, content, mime="application/json"):
         content = content if isinstance(content, bytes) else content.encode()
@@ -120,21 +83,10 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/recruiting/state":
             with LOCK:
                 return self.send(200, json.dumps(recruiting_state()))
-        if path == "/api/state":
-            with LOCK:
-                return self.send(200, json.dumps(response_state()))
-        if path == "/demo.mp4":
-            video = ROOT.parent / "docs" / "demo.mp4"
-            if video.exists():
-                return self.send(200, video.read_bytes(), "video/mp4")
         files = {
             "/": ("recruiter.html", "text/html"),
             "/recruiter.js": ("recruiter.js", "text/javascript"),
             "/recruiter.css": ("recruiter.css", "text/css"),
-            "/demo": ("index.html", "text/html"),
-            "/app.js": ("app.js", "text/javascript"),
-            "/style.css": ("style.css", "text/css"),
-            "/fixture.html": ("fixture.html", "text/html"),
         }
         if path not in files:
             return self.send(404, "Not found", "text/plain")
@@ -148,7 +100,7 @@ class Handler(BaseHTTPRequestHandler):
             or self.headers.get("X-Demo-Token") != TOKEN
             or self.headers.get("Origin") not in (None, ORIGIN)
         ):
-            return self.send(403, json.dumps({"error": "Local demo requests only"}))
+            return self.send(403, json.dumps({"error": "Local workspace requests only"}))
         if not LOCK.acquire(blocking=False):
             return self.send(409, json.dumps({"error": "A browser step is already running"}))
         try:
@@ -161,12 +113,13 @@ class Handler(BaseHTTPRequestHandler):
             if self.path.startswith("/api/recruiting/"):
                 result = recruiting_command(self.path.removeprefix("/api/recruiting/"), body)
             else:
-                result = command(self.path.removeprefix("/api/"), body)
+                raise ValueError("Only recruiting commands are available in the Jev showcase")
             self.send(200, json.dumps(result))
         except (ValueError, RuntimeError, TimeoutError) as error:
             self.send(400, json.dumps({"error": str(error)}))
         except Exception:
-            self.send(500, json.dumps({"error": "Local demo failed; no automatic retry. Reset to recover."}))
+            message = "Recruiting request failed. Inspect the session before starting again."
+            self.send(500, json.dumps({"error": message}))
         finally:
             LOCK.release()
 

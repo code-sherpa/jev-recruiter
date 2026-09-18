@@ -10,11 +10,11 @@
 <body>
   <header class="topbar">
     <a class="brand" href="/" aria-label="Jev Recruiter home"><span class="brand-mark" aria-hidden="true">j.</span> jev <span class="brand-light">recruiter</span></a>
-    <span class="local-label"><span class="dot"></span> Your browser. Your network.</span>
+    <span class="local-label"><span class="dot"></span> Jev × Browser Use Browser Harness</span>
   </header>
   <main>
     <section class="intro">
-      <div><p class="eyebrow">LINKEDIN SOURCING WORKSPACE</p><h1>Your next great hire<br />could be in your feed.</h1><p class="intro-copy">Discover field marketers in your timeline. Review the evidence.<br class="desktop-break" /> Build a shortlist with your own judgment.</p></div>
+      <div><p class="eyebrow">JEV · LINKEDIN SOURCING WORKSPACE</p><h1>Your next great hire<br />could be in your feed.</h1><p class="intro-copy">Jev discovers field marketers in your timeline. Review the evidence.<br class="desktop-break" /> Build a shortlist with your own judgment.</p></div>
       <div class="intro-note"><span class="note-symbol" aria-hidden="true">↗</span><p>From a passing post<br />to a promising conversation.</p><span>Discovery comes first.</span></div>
     </section>
     <div class="workspace">
@@ -22,26 +22,31 @@
         <form id="brief-form">
           <div class="section-heading"><span class="section-number">01</span><h2>The brief</h2></div>
           <label class="field-label" for="requirements">What makes a great field marketer?</label>
-          <p class="field-hint" id="requirements-hint">Edit this draft for your San Francisco role. The agent compares visible profile evidence with your brief.</p>
+          <p class="field-hint" id="requirements-hint">Edit this draft for your San Francisco role. Use one criterion per line, up to 20. Begin optional criteria with Preferred:.</p>
           <textarea id="requirements" name="requirements" required minlength="10" maxlength="12000" rows="9" aria-describedby="requirements-hint" placeholder="Describe your field marketing role…&#10;&#10;Consider event ownership, audience, industry, campaign measurement, location, and travel requirements."></textarea>
           <div class="budget-row"><label for="max-profiles">Profile limit<input id="max-profiles" name="max_profiles" type="number" min="1" max="50" value="10" required /></label><label for="max-scrolls">Feed scroll limit<input id="max-scrolls" name="max_scrolls" type="number" min="1" max="100" value="10" required /></label></div>
           <button class="primary start-button" id="start" type="submit">Start sourcing <span aria-hidden="true">↗</span></button>
           <p class="new-run-note" id="new-run-note" hidden>Starting again replaces this session. Export your results first to keep a copy.</p>
         </form>
-        <div class="setup-note"><h3>Before you begin</h3><p>Sign into LinkedIn in connected Chrome and configure your model credentials in <code>.env</code>.</p><p>The agent reads posts and profiles. You make the shortlist decisions.</p></div>
-        <a class="demo-link" href="/demo">Open the original Jev inspector <span aria-hidden="true">↗</span></a>
+        <div class="setup-note"><h3>Before you begin</h3><p>Sign into LinkedIn in Chrome connected through Browser Use Browser Harness. Set <code>TYPESAFE_API_KEY</code> in <code>.env</code>.</p><p>Jev is the only model. It chooses browser actions and checks visible evidence. You make the shortlist decisions.</p></div>
       </aside>
       <section class="session-panel" aria-labelledby="session-heading">
         <div class="session-heading"><div class="section-heading"><span class="section-number">02</span><h2 id="session-heading">The discovery</h2></div><span class="session-badge" id="session-badge">NOT STARTED</span></div>
         <div class="stats"><div><strong id="discovered-count">0</strong><span>Discovered</span></div><div><strong id="reviewed-count">0</strong><span>Profiles assessed</span></div><div><strong id="shortlist-count">0</strong><span>Your shortlist</span></div><div><strong id="scroll-count">0</strong><span>Feed scrolls</span></div></div>
         <div class="browser-panel"><div class="browser-bar"><div class="traffic" aria-hidden="true"><b></b><b></b><b></b></div><span id="browser-url">Your LinkedIn feed will appear here</span><span class="observation-label">OBSERVED PAGE</span></div><div class="viewport"><div class="browser-empty" id="browser-empty"><span class="empty-icon" aria-hidden="true">↗</span><h3>A little browsing.<br />A lot of possibility.</h3><p>Add your brief, then start sourcing to open<br />your LinkedIn feed in Chrome.</p></div><img id="screenshot" alt="Latest observed page in the recruiting browser" hidden /></div><div class="browser-footer"><span id="page-title">Waiting for your brief</span><span>Visible profile evidence</span></div></div>
         <div class="run-toolbar"><div class="run-status"><span class="dot" id="status-dot"></span><span id="status" role="status" aria-live="polite">Ready when you are</span></div><div class="run-controls"><button type="button" id="step" disabled>Next step</button><button type="button" id="run" class="primary" disabled>Run discovery <span aria-hidden="true">▷</span></button><button type="button" id="pause" hidden>Pause</button><button type="button" id="close" class="quiet" disabled>End session</button></div></div>
+        <section class="decision-panel" aria-labelledby="decision-heading">
+          <div class="decision-heading"><h3 id="decision-heading">Inside Jev’s decision</h3><span id="model-calls">0 model calls</span></div>
+          <p class="decision-empty" id="decision-empty">Run a step to see Jev’s actual choice and response timing.</p>
+          <dl class="decision-metrics" id="decision-metrics" hidden></dl>
+          <div class="decision-distribution" id="decision-distribution" hidden></div>
+        </section>
         <div id="error" role="alert" hidden></div>
       </section>
     </div>
     <section class="candidates-section" aria-labelledby="candidates-heading"><div class="candidates-heading"><div><p class="eyebrow">PEOPLE, WITH CONTEXT</p><h2 id="candidates-heading">Your discoveries <span id="candidate-count">0</span></h2></div><button type="button" id="export" disabled>Export results <span aria-hidden="true">↓</span></button></div><div class="filter-row"><div class="filters" aria-label="Filter discoveries"><button type="button" data-filter="all" aria-pressed="true">All people</button><button type="button" data-filter="potential_match" aria-pressed="false">Potential matches</button><button type="button" data-filter="needs_review" aria-pressed="false">Needs review</button><button type="button" data-filter="shortlisted" aria-pressed="false">Shortlisted</button><button type="button" data-filter="passed" aria-pressed="false">Passed</button></div><span class="human-note">Evidence informs. You decide.</span></div><div id="candidates"><div class="candidates-empty"><span aria-hidden="true">◎</span><h3>A shortlist starts with discovery.</h3><p>People from posts and recommendations will appear here with<br class="desktop-break" /> profile evidence, criteria checks, and gaps to follow up on.</p></div></div></section>
     <details class="activity"><summary>Session activity <span id="activity-count">0 steps</span></summary><ol id="history"><li>No browser actions yet.</li></ol></details>
-    <footer><span>Jev Recruiter <span class="footer-dot">·</span> Built on Browser Use × TypeSafe</span><span>Personal sourcing workspace</span></footer>
+    <footer><span>Jev Recruiter <span class="footer-dot">·</span> Jev × Browser Use Browser Harness</span><span>Personal sourcing workspace</span></footer>
   </main>
   <script type="module" src="/recruiter.js"></script>
 </body>

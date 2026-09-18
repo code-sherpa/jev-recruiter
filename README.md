@@ -9,18 +9,20 @@ Edit the San Francisco field marketer brief, open a session, and run discovery. 
 ```bash
 uv sync
 cp .env.example .env
-# Configure TEXT_MODEL_API_KEY, TEXT_MODEL_BASE_URL, and TEXT_MODEL.
+# Configure TYPESAFE_API_KEY. Recruiting uses Jev only.
 uv run browser-harness --doctor
 uv run jev
 ```
 
 Open **http://127.0.0.1:8766**. Connect Browser Harness to Chrome and sign into LinkedIn in that Chrome profile before starting. The app uses your existing browser session. It does not collect your LinkedIn password.
 
-Recruiting needs the configured text model for profile assessment. TypeSafe is only needed for the original generic agent demo, retained at `/demo`. Model requests contain your job brief and observed profile text, so use a provider appropriate for that data.
+Jev is the only model used by the recruiting app. Navigation calls the original `model.choose` operation and target implementation. Qualification checks send criterion status and indexed evidence choices together to the same Jev API. Evidence quotes are resolved from observed excerpts in code. No generative helper or secondary model is called. Model requests contain your job brief and observed profile text.
+
+Browser control uses the upstream `browser-harness==0.1.13` dependency, including its CDP connection, observations, freshness checks, and scrolling. A selected observed profile link opens in an owned tab to preserve feed position. The original generic library remains in source for reference; its text helper is not exposed by the recruiting server. A clean upstream clone is available locally in `jev-ultrafast/` and is ignored by this repository.
 
 ## Workflow
 
-1. Edit the suggested field marketer requirements and set the profile and feed scrolling limits.
+1. Edit the suggested field marketer requirements, one criterion per line (up to 20). Start optional criteria with `Preferred:`. Set the profile and feed scrolling limits.
 2. Start a session, then use the step or automatic run controls to collect profiles and evidence. Pause takes effect after the current request.
 3. Review each criterion, its supporting quotation, and any missing information. The recommendation is an aid to your review, not a hiring decision.
 4. Shortlist or pass candidates yourself. Export the results as JSON.
@@ -31,7 +33,7 @@ Only visible, observed LinkedIn profile URLs are visited. The recruiting flow pe
 
 The initial version samples a bounded number of visible profile screens. Collapsed experience, unavailable profiles, details below the sampled area, and content behind login are not evidence. Missing information stays unknown. Explicit mismatches require a supporting quotation. Location willingness and travel availability generally need direct confirmation. Assessment uses professional requirements, not protected personal traits.
 
-Results and the activity trail are saved locally under ignored `artifacts/recruiting/`. Export before starting another session. Reloading the page retains the current server session; restarting the server does not resume a previous run. The saved JSON files remain available on disk. Discovery and assessments are not yet verified against a live LinkedIn session in this environment.
+Results and the activity trail are saved locally under ignored `artifacts/recruiting/`. Export before starting another session. Reloading the page retains the current server session; restarting the server does not resume a previous run. The saved JSON files remain available on disk. The synthetic browser flow has been verified with real Browser Harness and Jev calls. A signed in LinkedIn session has not yet been verified in this environment.
 
 ## Development
 
@@ -44,11 +46,13 @@ node --check jev_ultrafast/snapshot.js
 uv build
 ```
 
-Tests use simulated browser and model responses and never call paid APIs.
+Unit tests use simulated browser and model responses and never call paid APIs.
+
+For an explicit live integration check, run `uv run --env-file .env python scripts/check_recruiting_jev.py`. This uses real Browser Harness and paid Jev calls against local synthetic pages, never a LinkedIn account. It verifies profile choice, criterion evidence, immediate URL persistence, and saved shortlist review. Browser Harness must already be configured.
 
 ## Original project documentation
 
-The documentation below describes the upstream generic agent and its original benchmarks, not recruiting performance.
+The documentation below describes the unmodified upstream generic agent and its original benchmarks. Its text helper and other model examples do not apply to this Jev only recruiting app.
 
 <img src="docs/banner.svg" alt="Jev Ultrafast · Browser Use × TypeSafe" width="100%" />
 

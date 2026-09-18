@@ -67,5 +67,6 @@ def test_routes_and_idle_state(server):
     assert "__TOKEN__" not in root.text
     assert server.get("/recruiter.js").status_code == 200
     assert server.get("/recruiter.css").status_code == 200
-    assert server.get("/demo").status_code == 200
+    assert server.get("/demo").status_code == 404
+    assert server.post("/api/reset", json={}, headers={"X-Demo-Token": demo.TOKEN}).status_code == 400
     assert server.get("/api/recruiting/state").json()["status"] == "idle"

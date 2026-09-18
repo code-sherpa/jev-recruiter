@@ -85,11 +85,29 @@ function renderCandidates() {
     const review = candidate.review || "unreviewed";
     return `<article class="candidate-card"><div class="candidate-top"><div class="candidate-identity"><span class="avatar" aria-hidden="true">${escape(initials)}</span><div><h3 class="candidate-name">${url ? `<a href="${escape(url)}" target="_blank" rel="noopener noreferrer">${escape(name)} <span aria-hidden="true">↗</span></a>` : escape(name)}</h3><p class="candidate-source">${escape(candidate.discovered_from || "From your feed")}</p></div></div><span class="badge ${recommendation === "potential_match" ? "match" : recommendation === "not_a_match" ? "unmatched" : ""}">${labels[recommendation] || "Awaiting assessment"}</span></div>
     ${url ? `<a class="profile-link" href="${escape(url)}" target="_blank" rel="noopener noreferrer">${escape(url)} ↗</a>` : ""}
+    ${assessment?.model ? `<p class="assessment-model">Assessed by Jev · ${escape(assessment.model)}${Number.isFinite(assessment.latency_ms) ? ` · ${escape(assessment.latency_ms)} ms` : ""}</p>` : ""}
     <p class="candidate-summary">${escape(assessment?.summary || "Profile link saved. Evidence will appear after the profile is visited.")}</p>
     <div class="criteria">${criteria.map((item) => `<div class="criterion"><span class="criterion-status ${item.status === "unknown" ? "unknown" : item.status === "not_met" ? "unmet" : ""}">${item.status === "met" ? "✓ Evidence found" : item.status === "not_met" ? "Does not meet" : "? Not confirmed"}</span><div><strong>${escape(item.criterion)}</strong>${item.quote ? `<blockquote>“${escape(item.quote)}”</blockquote>` : ""}</div></div>`).join("")}</div>
     ${(candidate.evidence || []).length ? `<details class="evidence"><summary>View observed evidence</summary>${candidate.evidence.map((item) => `<blockquote>${escape(item.text)}${safeProfileUrl(item.url) ? `<br /><a href="${escape(safeProfileUrl(item.url))}" target="_blank" rel="noopener noreferrer">View source ↗</a>` : ""}</blockquote>`).join("")}</details>` : ""}
     <div class="candidate-bottom"><span class="review-label">${escape(candidate.pending ? "Link saved. Assessment pending." : reviewLabels[review] || reviewLabels.unreviewed)}</span><div class="review-actions">${url ? `<button type="button" data-copy="${escape(url)}" aria-label="Copy profile link for ${escape(name)}">Copy link</button>` : ""}${candidate.pending ? "" : `<button type="button" data-review="shortlisted" data-url="${escape(candidate.profile_url)}" aria-label="Shortlist ${escape(name)}" aria-pressed="${review === "shortlisted"}">Shortlist</button><button type="button" data-review="passed" data-url="${escape(candidate.profile_url)}" aria-label="Pass on ${escape(name)}" aria-pressed="${review === "passed"}">Pass</button>${review !== "unreviewed" ? `<button type="button" data-review="unreviewed" data-url="${escape(candidate.profile_url)}" aria-label="Clear review for ${escape(name)}">Undo</button>` : ""}`}</div></div></article>`;
   }).join("");
+}
+function renderDecision() {
+  const decision = state?.decision;
+  const calls = state?.counts?.model_calls || 0;
+  $("model-calls").textContent = `${calls} model ${calls === 1 ? "call" : "calls"}`;
+  $("decision-empty").hidden = !!decision;
+  $("decision-metrics").hidden = !decision;
+  $("decision-distribution").hidden = true;
+  if (!decision) return;
+  const confidence = Number.isFinite(decision.confidence) ? `${(decision.confidence * 100).toFixed(1)}%` : null;
+  const metrics = [["Operation", decision.operation], ["Observed target", decision.target], ["Returned model", decision.model], ["Response time", Number.isFinite(decision.latency_ms) ? `${decision.latency_ms} ms` : null], ["Confidence", confidence]];
+  $("decision-metrics").innerHTML = metrics.filter(([, value]) => value !== null && value !== undefined && value !== "").map(([label, value]) => `<div><dt>${escape(label)}</dt><dd>${escape(value)}</dd></div>`).join("");
+  const operations = Object.entries(decision.operation_probabilities || {}).filter(([, probability]) => Number.isFinite(probability)).sort((a, b) => b[1] - a[1]);
+  if (operations.length) {
+    $("decision-distribution").hidden = false;
+    $("decision-distribution").innerHTML = operations.map(([operation, probability]) => `<span class="decision-option ${operation === decision.operation ? "selected" : ""}">${escape(operation)} <b>${(probability * 100).toFixed(1)}%</b></span>`).join("");
+  }
 }
 function render() {
   if (!state) return;
@@ -114,6 +132,7 @@ function render() {
   $("activity-count").textContent = `${history.length} steps`;
   $("history").innerHTML = history.length ? [...history].reverse().map((entry) => `<li>${escape(String(entry.action || "Observed page").replaceAll("_", " "))}${entry.message ? ` · ${escape(entry.message)}` : ""}${entry.profile_url && safeProfileUrl(entry.profile_url) ? ` · <a href="${escape(safeProfileUrl(entry.profile_url))}" target="_blank" rel="noopener noreferrer">View profile ↗</a>` : ""}</li>`).join("") : "<li>No browser actions yet.</li>";
   renderCandidates();
+  renderDecision();
   controls();
 }
 try { $("requirements").value = localStorage.getItem("jev.recruiting.requirements") ?? draft; }
@@ -123,6 +142,8 @@ $("brief-form").addEventListener("submit", (event) => {
   event.preventDefault();
   automatic = false;
   const requirements = $("requirements").value.trim();
+  const criteria = requirements.split(/\n/).filter((line) => line.trim());
+  if (criteria.length > 20) { $("requirements").setCustomValidity("Use up to 20 criteria, one per line."); $("requirements").reportValidity(); return; }
   if (requirements.length < 10) { $("requirements").setCustomValidity("Describe the role in at least 10 characters."); $("requirements").reportValidity(); return; }
   perform(() => request("start", {requirements, max_profiles:Number($("max-profiles").value), max_scrolls:Number($("max-scrolls").value)}), "Opening LinkedIn in your Chrome…");
 });

@@ -2,7 +2,10 @@
 
 This adaptation adds a LinkedIn recruiting workspace. Its explicit user requested
 scope permits a site specific, navigation and scrolling only discovery loop in
-recruiter.py. Preserve the generic agent and its original demo. Assessments must
+recruiter.py. Preserve the generic agent source as a reference. The recruiting server exposes
+only Jev model paths, never the generic text helper. Browser decisions must call
+the upstream operation and target chooser. Assessments use Jev choices over
+explicit criteria and indexed observed excerpts, not generated text. Assessments must
 cite observed professional evidence, retain unknowns, and leave candidate decisions
 to the user. Recruiting results belong in ignored artifacts/recruiting/.
 
