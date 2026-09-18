@@ -1,5 +1,11 @@
 # Jev Ultrafast
 
+This adaptation adds a LinkedIn recruiting workspace. Its explicit user requested
+scope permits a site specific, navigation and scrolling only discovery loop in
+recruiter.py. Preserve the generic agent and its original demo. Assessments must
+cite observed professional evidence, retain unknowns, and leave candidate decisions
+to the user. Recruiting results belong in ignored artifacts/recruiting/.
+
 Read README.md before editing. Keep the loop small: page -> indexed elements -> operation + target -> execution.
 
 - The input is one natural-language goal. Do not add site-specific plans or hardcoded field values.

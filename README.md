@@ -1,3 +1,55 @@
+# Jev Recruiter
+
+A local LinkedIn sourcing workspace adapted from [Jev Ultrafast](https://github.com/browser-use/jev-ultrafast).
+
+Edit the San Francisco field marketer brief, open a session, and run discovery. The browser reads visible profile links in your LinkedIn feed, including posts and recommendations, then opens those observed profiles in a separate tab. Profile evidence is compared with your requirements. Review the evidence yourself and mark candidates as shortlisted or passed.
+
+## Run locally
+
+```bash
+uv sync
+cp .env.example .env
+# Configure TEXT_MODEL_API_KEY, TEXT_MODEL_BASE_URL, and TEXT_MODEL.
+uv run browser-harness --doctor
+uv run jev
+```
+
+Open **http://127.0.0.1:8766**. Connect Browser Harness to Chrome and sign into LinkedIn in that Chrome profile before starting. The app uses your existing browser session. It does not collect your LinkedIn password.
+
+Recruiting needs the configured text model for profile assessment. TypeSafe is only needed for the original generic agent demo, retained at `/demo`. Model requests contain your job brief and observed profile text, so use a provider appropriate for that data.
+
+## Workflow
+
+1. Edit the suggested field marketer requirements and set the profile and feed scrolling limits.
+2. Start a session, then use the step or automatic run controls to collect profiles and evidence. Pause takes effect after the current request.
+3. Review each criterion, its supporting quotation, and any missing information. The recommendation is an aid to your review, not a hiring decision.
+4. Shortlist or pass candidates yourself. Export the results as JSON.
+
+Only visible, observed LinkedIn profile URLs are visited. The recruiting flow performs navigation and scrolling. It does not send messages, connection requests, likes, or comments. Profile visits still follow your LinkedIn account visibility settings.
+
+## Limits and data
+
+The initial version samples a bounded number of visible profile screens. Collapsed experience, unavailable profiles, details below the sampled area, and content behind login are not evidence. Missing information stays unknown. Explicit mismatches require a supporting quotation. Location willingness and travel availability generally need direct confirmation. Assessment uses professional requirements, not protected personal traits.
+
+Results and the activity trail are saved locally under ignored `artifacts/recruiting/`. Export before starting another session. Reloading the page retains the current server session; restarting the server does not resume a previous run. The saved JSON files remain available on disk. Discovery and assessments are not yet verified against a live LinkedIn session in this environment.
+
+## Development
+
+```bash
+uv run ruff check .
+uv run pytest
+node --check jev_ultrafast/static/recruiter.js
+node --check jev_ultrafast/static/app.js
+node --check jev_ultrafast/snapshot.js
+uv build
+```
+
+Tests use simulated browser and model responses and never call paid APIs.
+
+## Original project documentation
+
+The documentation below describes the upstream generic agent and its original benchmarks, not recruiting performance.
+
 <img src="docs/banner.svg" alt="Jev Ultrafast · Browser Use × TypeSafe" width="100%" />
 
 # Jev Ultrafast ⚡

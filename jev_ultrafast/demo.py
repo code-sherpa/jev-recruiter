@@ -11,6 +11,7 @@ from urllib.parse import urlparse
 
 from .agent import Agent
 from .questions import MAX_STEPS
+from .recruiter import Recruiter
 
 ROOT = Path(__file__).parent
 PORT = int(os.environ.get("TYPESAFE_DEMO_PORT", "8766"))
@@ -18,6 +19,7 @@ ORIGIN = f"http://127.0.0.1:{PORT}"
 TOKEN = secrets.token_urlsafe(32)
 LOCK = threading.Lock()
 AGENT = None
+RECRUITER = None
 
 
 def load_environment():
@@ -35,10 +37,43 @@ def response_state():
 
 
 def close_browser():
-    global AGENT
+    global AGENT, RECRUITER
     if AGENT:
         AGENT.close()
         AGENT = None
+    if RECRUITER:
+        RECRUITER.close()
+        RECRUITER = None
+
+
+def recruiting_state():
+    return RECRUITER.snapshot() if RECRUITER else {
+        "status": "idle", "candidates": [], "history": [], "page": None,
+        "counts": {"discovered": 0, "reviewed": 0, "queued": 0, "feed_scrolls": 0, "model_calls": 0},
+    }
+
+
+def recruiting_command(name, body):
+    global RECRUITER
+    if name == "start":
+        requirements = body.get("requirements", "")
+        max_profiles = body.get("max_profiles", 10)
+        max_scrolls = body.get("max_scrolls", 10)
+        # Construct successfully before replacing the previous run and its review queue.
+        replacement = Recruiter(requirements, max_profiles=max_profiles, max_scrolls=max_scrolls)
+        if RECRUITER:
+            RECRUITER.close()
+        RECRUITER = replacement
+    elif name == "close":
+        if RECRUITER:
+            RECRUITER.close()
+    elif name in {"tick", "review"}:
+        if RECRUITER is None:
+            raise ValueError("Start a recruiting session first")
+        RECRUITER.command(name, body)
+    else:
+        raise ValueError("Unknown recruiting command")
+    return recruiting_state()
 
 
 def command(name, body):
@@ -82,6 +117,9 @@ class Handler(BaseHTTPRequestHandler):
         if self.headers.get("Host") != f"127.0.0.1:{PORT}":
             return self.send(403, "Forbidden", "text/plain")
         path = urlparse(self.path).path
+        if path == "/api/recruiting/state":
+            with LOCK:
+                return self.send(200, json.dumps(recruiting_state()))
         if path == "/api/state":
             with LOCK:
                 return self.send(200, json.dumps(response_state()))
@@ -90,7 +128,10 @@ class Handler(BaseHTTPRequestHandler):
             if video.exists():
                 return self.send(200, video.read_bytes(), "video/mp4")
         files = {
-            "/": ("index.html", "text/html"),
+            "/": ("recruiter.html", "text/html"),
+            "/recruiter.js": ("recruiter.js", "text/javascript"),
+            "/recruiter.css": ("recruiter.css", "text/css"),
+            "/demo": ("index.html", "text/html"),
             "/app.js": ("app.js", "text/javascript"),
             "/style.css": ("style.css", "text/css"),
             "/fixture.html": ("fixture.html", "text/html"),
@@ -112,10 +153,15 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(409, json.dumps({"error": "A browser step is already running"}))
         try:
             length = int(self.headers.get("Content-Length", "0"))
-            if not 0 < length < 8192:
+            if not 0 < length < 65536:
                 raise ValueError("Invalid request size")
             body = json.loads(self.rfile.read(length))
-            result = command(self.path.removeprefix("/api/"), body)
+            if not isinstance(body, dict):
+                raise ValueError("Expected a JSON object")
+            if self.path.startswith("/api/recruiting/"):
+                result = recruiting_command(self.path.removeprefix("/api/recruiting/"), body)
+            else:
+                result = command(self.path.removeprefix("/api/"), body)
             self.send(200, json.dumps(result))
         except (ValueError, RuntimeError, TimeoutError) as error:
             self.send(400, json.dumps({"error": str(error)}))
@@ -132,7 +178,7 @@ def main():
     load_environment()
     atexit.register(close_browser)
     server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"Jev Ultrafast: {ORIGIN}", flush=True)
+    print(f"Jev Recruiter: {ORIGIN}", flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
