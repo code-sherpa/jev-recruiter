@@ -613,3 +613,76 @@ def test_failed_pagination_mutation_is_never_replayed(prepared, monkeypatch):
     assert state['status'] == 'blocked'
     assert len(calls) == 1
     assert state['counts']['search_page_turns'] == 0
+
+
+@pytest.mark.parametrize('outcome', ['results', 'empty', 'timeout'])
+def test_pagination_loading_preserves_source_until_results_or_explicit_empty(prepared, monkeypatch, outcome):
+    prepared.command('tick')
+    browser = prepared.feed
+    original_observe = FakeBrowser.observe
+    clock = [100.0]
+    monkeypatch.setattr(recruiter.time, 'monotonic', lambda: clock[0])
+    next_action = {'id': 'next', 'kind': 'click', 'role': 'button', 'label': 'Next', 'node': 50}
+    observation = {'url': browser.url, 'text': 'Page 1', 'actions': [next_action]}
+    monkeypatch.setattr(browser, 'observe', lambda **kwargs: observation)
+    monkeypatch.setattr(browser, 'act', lambda action, page: browser.actions.append(action))
+    prepared.command('tick')
+    assert browser.actions == [next_action]
+    requests_after_click = prepared.model_calls
+    observation = {'url': browser.url + '&page=2', 'text': 'LinkedIn\nPeople\nConnections', 'actions': [
+        {'id': 'account', 'kind': 'click', 'region': 'navigation', 'label': 'My profile',
+         'href': 'https://www.linkedin.com/in/my-account/'}]}
+    for second in (1, 3, 9):
+        clock[0] = 100.0 + second
+        state = prepared.command('tick')
+        assert state['status'] == 'running'
+        assert not browser.closed
+        assert len(prepared.sources) == 1
+        assert prepared.model_calls == requests_after_click
+        assert browser.actions == [next_action]
+    if outcome == 'results':
+        observation = original_observe(browser)
+        state = prepared.command('tick')
+        assert prepared.current['profile_url'] == 'https://www.linkedin.com/in/alice/'
+        assert state['status'] == 'running'
+    elif outcome == 'empty':
+        observation = {'url': browser.url + '&page=2', 'text': 'No results found', 'actions': []}
+        prepared.command('tick')
+        state = prepared.command('tick')
+        assert state['status'] == 'done'
+        assert browser.closed
+    else:
+        clock[0] = 110.0
+        state = prepared.command('tick')
+        assert state['status'] == 'blocked'
+        assert 'within 10 seconds' in state['error']
+        assert not browser.closed
+    assert state['counts']['search_page_turns'] == 1
+    assert browser.actions == [next_action]
+
+
+def test_pagination_keeps_waiting_when_previous_results_remain_before_loading(prepared, monkeypatch):
+    prepared.command('tick')
+    browser = prepared.feed
+    old_profile = {'id': 'old', 'kind': 'click', 'region': 'main', 'label': 'Previous result',
+                   'href': 'https://www.linkedin.com/in/previous/', 'context': 'Field Marketing Manager'}
+    prepared.visited.add(old_profile['href'])
+    next_action = {'id': 'next', 'kind': 'click', 'role': 'button', 'label': 'Next', 'node': 50}
+    observation = {'url': browser.url, 'text': 'Page 1', 'actions': [old_profile, next_action]}
+    monkeypatch.setattr(browser, 'observe', lambda **kwargs: observation)
+    monkeypatch.setattr(browser, 'act', lambda action, page: browser.actions.append(action))
+    prepared.command('tick')
+    calls = prepared.model_calls
+    prepared.command('tick')  # Prior results are still rendered after the click.
+    assert 'pending_navigation_since' in prepared.sources[-1]
+    assert prepared.model_calls == calls
+    observation = {'url': browser.url, 'text': 'LinkedIn\nPeople', 'actions': []}
+    prepared.command('tick')
+    assert not browser.closed
+    assert 'pending_navigation_since' in prepared.sources[-1]
+    observation = FakeBrowser.observe(browser)
+    state = prepared.command('tick')
+    assert state['status'] == 'running'
+    assert prepared.current['profile_url'] == 'https://www.linkedin.com/in/alice/'
+    assert 'pending_navigation_since' not in prepared.sources[-1]
+    assert browser.actions == [next_action]

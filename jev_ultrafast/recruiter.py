@@ -4,6 +4,7 @@ import copy
 import json
 import os
 import re
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlencode, urlsplit
@@ -321,6 +322,24 @@ class Recruiter:
         source = self.sources[-1]
         browser = source["browser"]
         page = self._observe(browser, source["url"])
+        if "pending_navigation_since" in source:
+            profiles = {profile_url(action.get("href")) for action in page["actions"]
+                        if action["kind"] == "click" and action.get("region") == "main"
+                        and profile_url(action.get("href"))}
+            changed = (page["url"] != source["pending_navigation_url"]
+                       or profiles != source["pending_navigation_profiles"])
+            results_ready = bool(profiles) and changed
+            explicitly_empty = any(phrase in page.get("text", "").casefold() for phrase in (
+                "no results found", "no results for", "no matching results", "try broadening your search"))
+            if not results_ready and not explicitly_empty:
+                if time.monotonic() - source["pending_navigation_since"] >= 10:
+                    raise ValueError("The next search page did not show results within 10 seconds. "
+                                     "The navigation was not repeated; saved candidates remain available.")
+                self.message = "Waiting for the selected search page to show results."
+                return
+            del source["pending_navigation_since"]
+            del source["pending_navigation_url"]
+            del source["pending_navigation_profiles"]
         if source["rewind"]:
             actions = [a for a in page["actions"] if a["kind"] == "scroll" and a.get("delta", 0) < 0]
             if actions:
@@ -397,6 +416,11 @@ class Recruiter:
         action = next(a for a in actions if a["id"] == selected)
         if action["id"] in pagination_ids:
             self._read_action(browser, page, action)
+            source["pending_navigation_since"] = time.monotonic()
+            source["pending_navigation_url"] = page["url"]
+            source["pending_navigation_profiles"] = {
+                profile_url(a.get("href")) for a in page["actions"]
+                if a["kind"] == "click" and a.get("region") == "main" and profile_url(a.get("href"))}
             self.search_page_turns += 1
             self.queue = []
         elif action["kind"] == "click":
