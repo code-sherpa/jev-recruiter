@@ -30,7 +30,7 @@ def render(folder: Path, metadata: dict, ffmpeg: str) -> Path:
                 f"duration {max(0.001, end - frame['elapsed_seconds']):.6f}",
             ]
         )
-    lines.append(f"file '{frames[-1]['file']}'")
+    lines.extend([f"file '{frames[-1]['file']}'", "option framerate 1000"])
     manifest = folder / "frames.ffconcat"
     manifest.write_text("\n".join(lines) + "\n")
     output = folder / "demo.mp4"
@@ -128,6 +128,9 @@ def main() -> None:
         last_elapsed = elapsed
 
     try:
+        # Background windows stop compositing. Keep this session attached so
+        # focus emulation remains active throughout the recording.
+        cdp("Emulation.setFocusEmulationEnabled", session_id=session, enabled=True)
         initial = cdp("Page.captureScreenshot", session_id=session, format="jpeg", quality=85)
         save(initial["data"], epoch)
         cdp("Page.startScreencast", session_id=session, format="jpeg", quality=85, everyNthFrame=1)
