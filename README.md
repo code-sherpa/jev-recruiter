@@ -22,12 +22,12 @@ Browser control uses the upstream `browser-harness==0.1.13` dependency, includin
 
 ## Workflow
 
-1. Edit the suggested engineering requirements, one criterion per line (up to 20). Start optional criteria with `Preferred:`. Edit the starting search and set profile and discovery scrolling limits.
+1. Edit the suggested engineering requirements, one criterion per line (up to 20). Start optional criteria with `Preferred:`. Edit the starting search and set profile and discovery movement limits (scrolls and search page changes).
 2. Start a session, then use the step or automatic run controls to collect profiles and evidence. Pause takes effect after the current request.
 3. Review each criterion, its supporting quotation, and any missing information. The recommendation is an aid to your review, not a hiring decision.
 4. Shortlist or pass candidates yourself. Export the results as JSON.
 
-Only visible, observed LinkedIn profile URLs that pass Jev’s title relevance check are visited. Only the second and third headed profile sections in the sidebar supply recommendations. The first section and unidentified sections are excluded, even when their titles match. Section numbers persist while scrolling, and the source section is saved with each discovered link. Eligible sidebar recommendations take priority over returning to search results. The recruiting flow performs navigation and scrolling. It does not send messages, connection requests, likes, or comments. Profile visits still follow your LinkedIn account visibility settings.
+Only visible, observed LinkedIn profile URLs that pass Jev’s title relevance check are visited. Only the second and third headed profile sections in the sidebar supply recommendations. The first section and unidentified sections are excluded, even when their titles match. Section numbers persist while scrolling, and the source section is saved with each discovered link. Jev can select the observed Next button to continue through people search results. Eligible sidebar recommendations take priority over returning to search results. The recruiting flow performs navigation and scrolling. It does not send messages, connection requests, likes, or comments. Profile visits still follow your LinkedIn account visibility settings.
 
 ## Limits and data
 

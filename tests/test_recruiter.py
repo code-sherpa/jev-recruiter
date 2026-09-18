@@ -205,6 +205,20 @@ def test_profile_budget_is_validated_before_browser(monkeypatch):
         recruiter.Recruiter('Field marketer experience', max_profiles=51)
 
 
+@pytest.mark.parametrize('moves', [1, 300, 500])
+def test_discovery_move_budget_accepts_supported_boundaries(prepared, moves):
+    run = recruiter.Recruiter('Solutions engineer', max_scrolls=moves)
+    assert run.snapshot()['max_scrolls'] == moves
+    assert not FakeBrowser.instances
+
+
+@pytest.mark.parametrize('moves', [0, 501, True, '300'])
+def test_discovery_move_budget_rejects_invalid_boundaries(prepared, moves):
+    with pytest.raises(ValueError, match='max_scrolls must be an integer from 1 to 500'):
+        recruiter.Recruiter('Solutions engineer', max_scrolls=moves)
+    assert not FakeBrowser.instances
+
+
 def test_criteria_are_parsed_without_model(prepared):
     assert prepared.criteria == ['[Required] Field events']
     assert prepared.model_calls == 0
@@ -520,3 +534,82 @@ def test_match_target_counts_evidence_not_visits_or_shortlists(
     calls = state['counts']['model_calls']
     assert run.command('tick')['counts']['model_calls'] == calls
     assert json.loads(run.path.read_text())['target_reached'] is target_reached
+
+
+def test_jev_search_pagination_reads_next_page_without_opening_arbitrary_controls(prepared, monkeypatch):
+    prepared.command('tick')
+    browser = prepared.feed
+    original_observe = FakeBrowser.observe
+    next_action = {'id': 'next_page', 'kind': 'click', 'role': 'button', 'label': 'Next', 'node': 50}
+
+    def observe(**kwargs):
+        if browser.actions:
+            return original_observe(browser, **kwargs)
+        return {'url': browser.url, 'text': 'Page 1', 'actions': [
+            next_action, {'id': 'connect', 'kind': 'click', 'role': 'button', 'label': 'Connect'},
+            {'id': 'next_link', 'kind': 'click', 'role': 'link', 'label': 'Next', 'href': 'https://evil.test/'},
+            {'id': 'page_two', 'kind': 'click', 'role': 'button', 'label': 'Page 2'},
+        ]}
+
+    decisions = []
+
+    def choose(page, goal, history):
+        decisions.append(page['actions'])
+        return decision(page['actions'][0]['id'], 'CLICK')
+
+    def act(action, page):
+        assert decisions and decisions[-1] == [next_action]
+        assert action is next_action
+        browser.actions.append(action)
+
+    monkeypatch.setattr(browser, 'observe', observe)
+    monkeypatch.setattr(browser, 'act', act)
+    monkeypatch.setattr(recruiter, 'choose', choose)
+    state = prepared.command('tick')
+    assert state['status'] == 'running'
+    assert state['counts']['search_page_turns'] == 1
+    assert len(FakeBrowser.instances) == 1
+    assert prepared.current is None
+    assert prepared.sources[-1]['browser'] is browser
+    assert prepared.history[-1]['action'] == 'Executed Jev browser action'
+    prepared.command('tick')
+    assert prepared.current['profile_url'] == 'https://www.linkedin.com/in/alice/'
+
+
+@pytest.mark.parametrize('profile_source,budget_used', [(True, False), (False, True)])
+def test_pagination_excluded_from_profile_sources_and_after_discovery_budget(prepared, monkeypatch,
+                                                                           profile_source, budget_used):
+    prepared.command('tick')
+    browser = prepared.feed
+    if profile_source:
+        browser.url = 'https://www.linkedin.com/in/source/'
+        prepared.sources[-1]['url'] = browser.url
+    if budget_used:
+        prepared.search_page_turns = prepared.max_scrolls
+    monkeypatch.setattr(browser, 'observe', lambda **kwargs: {
+        'url': browser.url, 'text': '', 'actions': [
+            {'id': 'next', 'kind': 'click', 'role': 'button', 'label': 'Next', 'node': 50}]})
+    monkeypatch.setattr(recruiter, 'choose', lambda *args: pytest.fail('Excluded Next offered to Jev'))
+    prepared.command('tick')
+    assert not browser.actions
+    assert browser.closed
+
+
+def test_failed_pagination_mutation_is_never_replayed(prepared, monkeypatch):
+    prepared.command('tick')
+    browser = prepared.feed
+    monkeypatch.setattr(browser, 'observe', lambda **kwargs: {
+        'url': browser.url, 'text': '', 'actions': [
+            {'id': 'next', 'kind': 'click', 'role': 'button', 'label': 'Next', 'node': 50}]})
+    calls = []
+
+    def fail(action, page):
+        calls.append(action)
+        raise RuntimeError('uncertain page transition')
+
+    monkeypatch.setattr(browser, 'act', fail)
+    for _ in range(4):
+        state = prepared.command('tick')
+    assert state['status'] == 'blocked'
+    assert len(calls) == 1
+    assert state['counts']['search_page_turns'] == 0

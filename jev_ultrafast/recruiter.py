@@ -78,7 +78,7 @@ class Recruiter:
         if not isinstance(requirements, str) or not 10 <= len(requirements.strip()) <= 12000:
             raise ValueError("Enter job requirements between 10 and 12000 characters.")
         for label, value in (("max_profiles", max_profiles), ("max_scrolls", max_scrolls)):
-            limit = 50 if label == "max_profiles" else 100
+            limit = 50 if label == "max_profiles" else 500
             if type(value) is not int or not 1 <= value <= limit:
                 raise ValueError(f"{label} must be an integer from 1 to {limit}.")
         if target_matches is not None and (type(target_matches) is not int or not 1 <= target_matches <= max_profiles):
@@ -111,6 +111,7 @@ class Recruiter:
         self.feed, self.profile, self.current = None, None, None
         self.page = None
         self.feed_scrolls = self.model_calls = 0
+        self.search_page_turns = 0
         self.profile_scrolls = 0
         self.decision = None
         self.idle_steps = 0
@@ -129,6 +130,7 @@ class Recruiter:
             "counts": {"discovered": len(self.seen), "reviewed": len(self.candidates),
                        "qualified": self.qualified_count,
                        "queued": len(self.queue), "feed_scrolls": self.feed_scrolls,
+                       "search_page_turns": self.search_page_turns,
                        "model_calls": self.model_calls},
             "candidates": self.candidates, "history": self.history,
             "discoveries": self.discoveries,
@@ -335,6 +337,8 @@ class Recruiter:
         # observed target per canonical URL, with its visible title beside its name.
         profile_actions = {}
         controls = []
+        pagination_ids = set()
+        discovery_budget_available = self.feed_scrolls + self.search_page_turns < self.max_scrolls
 
         def richness(action):
             return len(action.get("context", "")), len(action.get("label", ""))
@@ -346,8 +350,16 @@ class Recruiter:
                 previous = profile_actions.get(url)
                 if previous is None or richness(action) > richness(previous):
                     profile_actions[url] = action
+            elif (not source["url"] and discovery_budget_available
+                  and action["kind"] == "click" and action.get("role") == "button"
+                  and action.get("label", "").strip().casefold() == "next"
+                  and not action.get("href")):
+                # LinkedIn people search exposes its next page as a native button.
+                # It must still be visible, enabled, selected by Jev, and fresh at execution.
+                controls.append(action)
+                pagination_ids.add(action["id"])
             elif ((action["kind"] == "scroll" and action.get("delta", 0) > 0
-                   and self.feed_scrolls < self.max_scrolls) or action["kind"] == "wait"):
+                   and discovery_budget_available) or action["kind"] == "wait"):
                 controls.append(action)
         actions = []
         for url, action in profile_actions.items():
@@ -363,7 +375,7 @@ class Recruiter:
             self.message = "Finished this source. Returning to the previous relevant profile."
             return
         selected = self._choose(page, actions,
-            "This step only chooses which already title screened profile to read. "
+            "Choose a title screened profile to read, or continue navigating this source. "
             "Do not require a profile to meet every job requirement; qualification assessment happens after the visit. "
             "Offered profile links passed Jev's professional title screening for the starting search: " +
             self.search_query + ". Prefer titles most directly relevant to the requested role. "
@@ -372,6 +384,8 @@ class Recruiter:
             "otherwise a relevant "
             "search result. The first sidebar profile section is excluded. "
             "If no eligible profile is visible, SCROLL_DOWN past the first section to reveal sections two and three. "
+            "On search results, prefer relevant unvisited profiles; when none remain visible, choose the offered "
+            "Next button to read the next results page, or scroll to reveal more results and pagination. "
             "Never open unrelated professional titles. Never send messages or interact socially.")
         if selected in {"DONE", "BLOCKED"}:
             self.sources.pop()
@@ -381,7 +395,11 @@ class Recruiter:
                 self.status = "done" if selected == "DONE" else "blocked"
             return
         action = next(a for a in actions if a["id"] == selected)
-        if action["kind"] == "click":
+        if action["id"] in pagination_ids:
+            self._read_action(browser, page, action)
+            self.search_page_turns += 1
+            self.queue = []
+        elif action["kind"] == "click":
             if not browser.fresh(page, action):
                 raise StalePage("The chosen profile changed before navigation. Observe again.")
             url = profile_url(action["href"])

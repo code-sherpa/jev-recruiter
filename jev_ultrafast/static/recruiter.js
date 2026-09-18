@@ -118,7 +118,7 @@ function render() {
   $("reviewed-count").textContent = counts.reviewed || 0;
   $("qualified-count").textContent = `${counts.qualified || 0} / ${state.target_matches || $("target-matches").value}`;
   $("shortlist-count").textContent = (state.candidates || []).filter((candidate) => candidate.review === "shortlisted").length;
-  $("scroll-count").textContent = counts.feed_scrolls || 0;
+  $("scroll-count").textContent = (counts.feed_scrolls || 0) + (counts.search_page_turns || 0);
   const statuses = {ready:"Ready for the next step",running:"Ready for the next step",blocked:"Paused. Needs attention.",done:"Discovery complete. Review your candidates.",closed:"Session ended. Your discoveries remain available."};
   $("status").textContent = automatic ? "Following relevant profiles and recommendations…" : state.message || statuses[state.status] || "Ready when you are";
   $("session-badge").textContent = automatic ? "RUNNING" : state.run_id ? ({running:"PAUSED", ready:"READY", blocked:"NEEDS ATTENTION", done:"COMPLETE", closed:"ENDED"}[state.status] || "READY") : "NOT STARTED";
