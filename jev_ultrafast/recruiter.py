@@ -11,6 +11,7 @@ from urllib.parse import urlencode, urlsplit
 from uuid import uuid4
 
 from .browser import Browser, StalePage
+from .decision_provider import decision_provider
 from .discovery_model import screen_profiles
 from .model import choose
 from .recruiting_model import assess, parse_criteria
@@ -86,8 +87,9 @@ class Recruiter:
             raise ValueError("target_matches must be an integer from 1 to max_profiles, or null.")
         if type(max_profile_scrolls) is not int or not 0 <= max_profile_scrolls <= 20:
             raise ValueError("max_profile_scrolls must be an integer from 0 to 20.")
-        if not os.environ.get("TYPESAFE_API_KEY", "").strip():
-            raise ValueError("Configure TYPESAFE_API_KEY before starting recruiting.")
+        provider = decision_provider()
+        self.provider, self.model = provider.name, provider.model
+        self.provider_label = "Morph" if provider.name == "morph" else "Jev"
         self.viewport = {
             "width": int(os.environ.get("RECRUITING_VIEWPORT_WIDTH", "2048")),
             "height": int(os.environ.get("RECRUITING_VIEWPORT_HEIGHT", "1280")),
@@ -123,7 +125,7 @@ class Recruiter:
         return copy.deepcopy({
             "search_query": self.search_query,
             "run_id": self.run_id, "requirements": self.requirements, "status": self.status,
-            "message": self.message, "error": self.error, "criteria": self.criteria,
+            "message": self.message.replace("Jev", self.provider_label), "error": self.error, "criteria": self.criteria,
             "max_profiles": self.max_profiles, "max_scrolls": self.max_scrolls,
             "target_matches": self.target_matches,
             "max_profile_scrolls": self.max_profile_scrolls, "max_model_calls": self.max_model_calls,
@@ -135,7 +137,8 @@ class Recruiter:
                        "model_calls": self.model_calls},
             "candidates": self.candidates, "history": self.history,
             "discoveries": self.discoveries,
-            "decision": self.decision, "model": os.environ.get("TYPESAFE_MODEL", "jev-latest"),
+            "decision": self.decision, "model": self.model, "provider": self.provider,
+            "provider_label": self.provider_label,
             "viewport": self.viewport,
             "limitations": f"At most {self.max_profile_scrolls + 1} visible profile screens are read. "
                             "Collapsed sections are not expanded. "
@@ -169,6 +172,7 @@ class Recruiter:
         temporary.replace(self.path)
 
     def _log(self, action, **details):
+        action = action.replace("Jev", self.provider_label)
         self.history.append({"action": action, "at": datetime.now(timezone.utc).isoformat(), **details})
         self._save()
 

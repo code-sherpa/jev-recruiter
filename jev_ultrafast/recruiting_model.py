@@ -1,10 +1,10 @@
 """Jev choices over explicit job criteria and indexed, observed profile evidence."""
 
-import os
 import re
 import time
 from datetime import datetime, timezone
 
+from .decision_provider import decision_provider
 from .model import post_json, validate_choice
 
 POLICY = """Assist a human recruiter with professional evidence, never a final hiring decision.
@@ -95,9 +95,7 @@ def evidence_choices(evidence):
 
 def assess(criteria, evidence, profile_url):
     """Ask status and speculative evidence heads together; resolve quotes locally."""
-    key = os.environ.get("TYPESAFE_API_KEY", "").strip()
-    if not key:
-        raise ValueError("Configure TYPESAFE_API_KEY before assessing profiles.")
+    provider = decision_provider()
     if not isinstance(criteria, list) or not 1 <= len(criteria) <= 20 or any(
         not isinstance(c, str) or not c.strip() for c in criteria
     ):
@@ -122,16 +120,16 @@ def assess(criteria, evidence, profile_url):
             },
         }
     body = {
-        "model": os.environ.get("TYPESAFE_MODEL", "jev-latest"),
+        "model": provider.model,
         "state": {"profile_url": profile_url, "observed_evidence": excerpts,
                   "assessment_date_utc": datetime.now(timezone.utc).date().isoformat()},
         "questions": questions,
     }
     started = time.perf_counter()
-    result = post_json("https://api.typesafe.ai/v1/systemone", key, body)
+    result = post_json(provider.url, provider.key, body)
     answers = result.get("answers") if isinstance(result, dict) else None
     if not isinstance(answers, dict):
-        raise ValueError("Jev returned no valid assessment answers.")
+        raise ValueError("Model provider returned no valid assessment answers.")
     findings = []
     for index, criterion in enumerate(criteria, 1):
         status = validate_choice(answers.get(f"c{index}_status", {}), STATUSES)["choice"]
@@ -144,7 +142,7 @@ def assess(criteria, evidence, profile_url):
                 status = "unknown"
         findings.append({"criterion": criterion, "status": status, "quote": quote})
     return {"criteria": findings}, {
-        "model": result.get("model", body["model"]), "usage": result.get("usage", {}),
+        "provider": provider.name, "model": result.get("model", body["model"]), "usage": result.get("usage", {}),
         "latency_ms": round((time.perf_counter() - started) * 1000),
         "evidence_choices": len(excerpts),
     }

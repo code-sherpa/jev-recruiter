@@ -8,7 +8,7 @@
 
 A local recruiting workspace built on [Browser Use’s Jev Ultrafast](https://github.com/browser-use/jev-ultrafast) and [Browser Harness](https://github.com/browser-use/browser-harness). Jev chooses where to go, screens professional titles, and assesses visible profile excerpts against your brief. The live browser sits at the top, open by default, inside a Craigslist inspired interface.
 
-**Jev is the only model used by the recruiting app.** No secondary model writes assessments or controls navigation.
+**The default provider is TypeSafe’s Jev.** You can explicitly select Morph instead. One provider handles all navigation, title screening, and evidence choices, with no secondary text model and no provider fallback.
 
 [Quick start](#quick-start) · [How it works](#how-it-works) · [Read the loop](jev_ultrafast/recruiter.py) · [MIT license](LICENSE)
 
@@ -25,7 +25,7 @@ The default brief looks for **forward deployed engineers or solutions engineers 
 
 ## Quick start
 
-You need Python 3.12 or newer, [uv](https://docs.astral.sh/uv/), Chrome with a signed in LinkedIn session, and a [TypeSafe API key](https://docs.typesafe.ai/introduction).
+You need Python 3.12 or newer, [uv](https://docs.astral.sh/uv/), Chrome with a signed in LinkedIn session, and a [TypeSafe API key](https://docs.typesafe.ai/introduction) or a [Morph API key](https://docs.morphllm.com/api-reference/endpoint/singleshot).
 
 ```bash
 git clone https://github.com/skeptrunedev/jev-recruiter.git
@@ -37,11 +37,23 @@ cp .env.example .env
 Set your key in `.env`:
 
 ```dotenv
+DECISION_PROVIDER=typesafe
 TYPESAFE_API_KEY=your_typesafe_api_key
 TYPESAFE_MODEL=jev-latest
 RECRUITING_VIEWPORT_WIDTH=2048
 RECRUITING_VIEWPORT_HEIGHT=1280
 ```
+
+To use Morph for the same choice contract, set these values instead. A TypeSafe key is not required in this mode:
+
+```dotenv
+DECISION_PROVIDER=morph
+MORPH_API_KEY=your_morph_api_key
+MORPH_MODEL=morph-systemone-v1
+MORPH_API_URL=https://api.morphllm.com/v1/singleshot
+```
+
+TypeSafe requests go to `https://api.typesafe.ai/v1/systemone`. Morph uses the configured `MORPH_API_URL`, defaulting to its documented singleshot endpoint above. Both receive the same indexed `state` and `questions`. Only the endpoint, credential, and configured model change. Invalid responses stop the run rather than switching providers. Morph availability depends on that endpoint being deployed and accessible with your key. Restart the server after changing provider settings. Saved runs identify the configured provider and model.
 
 Connect Chrome and start the app:
 
@@ -106,7 +118,7 @@ The recruiting flow navigates and scrolls. It does not send messages, connection
 
 Discovered URLs, screening results, assessments, your review decisions, and the activity trail are saved under ignored `artifacts/recruiting/`. Export results before starting another session. Refreshing the page retains the current server session; restarting the server does not resume an earlier run. Saved JSON files remain on disk.
 
-Your brief and observed profile text are sent to the Jev API for model decisions. Credentials stay on the server in ignored `.env`. Keep personal recruiting exports and raw recordings out of source control.
+Your brief and observed profile text are sent to the configured provider, TypeSafe or Morph, for model decisions. Credentials stay on the server in ignored `.env`. Keep personal recruiting exports and raw recordings out of source control.
 
 ## Small enough to read
 

@@ -60,7 +60,7 @@ def test_invalid_choice_is_rejected(mutation):
         a["choice"] = "b"
     else:
         a["confidence"] = 5
-    with pytest.raises(ValueError, match="Invalid TypeSafe"):
+    with pytest.raises(ValueError, match="Invalid model choice"):
         model.validate_choice(a, {"a", "b"})
 
 
@@ -109,7 +109,7 @@ def test_click_cannot_consume_a_text_target(monkeypatch):
 
     monkeypatch.setenv("TYPESAFE_API_KEY", "test")
     monkeypatch.setattr(model, "post_json", post)
-    with pytest.raises(ValueError, match="Invalid TypeSafe"):
+    with pytest.raises(ValueError, match="Invalid model choice"):
         model.choose(page(), "Find a book", [])
 
 

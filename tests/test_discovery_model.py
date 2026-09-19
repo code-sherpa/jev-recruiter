@@ -82,7 +82,7 @@ def test_unused_evidence_head_cannot_create_eligible_profile(monkeypatch, provid
 def test_invented_evidence_target_rejected(provider):
     _, selections = provider
     selections.update(p1_status="relevant", p1_evidence="e999")
-    with pytest.raises(ValueError, match="Invalid TypeSafe response"):
+    with pytest.raises(ValueError, match="Invalid model choice response"):
         discovery_model.screen_profiles("Field marketer", [card()])
 
 

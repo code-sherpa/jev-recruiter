@@ -11,7 +11,7 @@
 <div class="site-layout">
   <aside class="leftbar">
     <a class="brand" href="/">jevlist</a>
-    <p class="brand-caption">recruiting with jev</p>
+    <p id="provider-caption" class="brand-caption">recruiting with model choices</p>
     <nav class="left-links"><a href="#brief-form">create a search</a><a href="#candidates-heading">saved profiles</a><a href="#activity">session history</a></nav>
     <form id="brief-form">
       <label for="search-query">search people</label>
@@ -30,7 +30,7 @@
       <button id="start" type="submit">start search</button>
       <p id="new-run-note" hidden>Starting again replaces this session. Export your results first.</p>
     </form>
-    <div class="sidebar-note"><a href="#how-it-works">about this search</a><p>Jev only.<br />Your Chrome session.<br />Your final decision.</p></div>
+    <div class="sidebar-note"><a href="#how-it-works">about this search</a><p>One decision provider.<br />Your Chrome session.<br />Your final decision.</p></div>
     <p class="sidebar-bottom">san francisco bay area<br />personal recruiting workspace</p>
   </aside>
   <main>
@@ -38,11 +38,11 @@
     <nav class="area-nav" aria-label="Workspace navigation"><a href="#candidates-heading">people</a><a href="#role-settings">engineering</a><a href="#live-browser">live browser</a><a href="#activity">activity</a></nav>
     <section class="session-panel" aria-label="Browsing controls">
       <details id="live-browser" class="live-browser" open><summary>live browser <span id="page-title">waiting for your search</span></summary>
-        <div class="browser-panel"><div id="browser-url">Your LinkedIn search will appear here</div><div class="viewport"><div id="browser-empty"><h3>no browsing session yet</h3><p>start a search to follow Jev in Chrome</p></div><img id="screenshot" alt="Latest observed page in the recruiting browser" hidden /></div></div>
+        <div class="browser-panel"><div id="browser-url">Your LinkedIn search will appear here</div><div class="viewport"><div id="browser-empty"><h3>no browsing session yet</h3><p>start a search to watch the browser in Chrome</p></div><img id="screenshot" alt="Latest observed page in the recruiting browser" hidden /></div></div>
       </details>
       <div class="run-toolbar"><span id="status" role="status" aria-live="polite">ready when you are</span><div class="run-controls"><button type="button" id="step" disabled>next step</button><button type="button" id="run" disabled>run discovery</button><button type="button" id="pause" hidden>pause</button><button type="button" id="close" disabled>end session</button></div></div>
       <div id="error" role="alert" hidden></div>
-      <details class="decision-panel"><summary>inside jev’s decision <span id="model-calls">0 model calls</span></summary><p id="decision-empty">Run a step to see Jev’s choice and response timing.</p><dl id="decision-metrics" hidden></dl><div id="decision-distribution" hidden></div></details>
+      <details class="decision-panel"><summary>inside the model decision <span id="model-calls">0 model calls</span></summary><p id="decision-empty">Run a step to see the model choice and response timing.</p><dl id="decision-metrics" hidden></dl><div id="decision-distribution" hidden></div></details>
     </section>
     <div class="directory">
       <section><h2><a href="#role-settings">engineering talent</a></h2><ul><li><a href="#role-settings">forward deployed engineers</a></li><li><a href="#role-settings">solutions engineers</a></li><li><a href="#brief-form">edit search &amp; requirements</a></li></ul></section>
@@ -55,7 +55,7 @@
       <div id="candidates"><p class="candidates-empty">no profiles saved yet. start a search to find people.</p></div>
     </section>
     <details id="activity" class="activity"><summary>session history <span id="activity-count">0 steps</span></summary><ol id="history"><li>No browser actions yet.</li></ol></details>
-    <footer><span>© jevlist</span><a href="#how-it-works">about</a><a href="#brief-form">search settings</a><span>Jev × Browser Use Browser Harness</span></footer>
+    <footer><span>© jevlist</span><a href="#how-it-works">about</a><a href="#brief-form">search settings</a><span>Powered by Browser Use Browser Harness</span></footer>
   </main>
 </div>
 <script type="module" src="/recruiter.js"></script>

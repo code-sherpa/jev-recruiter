@@ -7,6 +7,7 @@ import time
 
 import httpx
 
+from .decision_provider import decision_provider
 from .questions import NEXT_ACTION, TARGET, TEXT_VALUE
 
 CLIENT = httpx.Client(http2=True, timeout=25)
@@ -23,7 +24,10 @@ def post_json(url, key, body):
             continue
         if response.is_error:
             raise RuntimeError(f"Model provider returned HTTP {response.status_code}; no action executed.")
-        return response.json()
+        try:
+            return response.json()
+        except ValueError:
+            raise ValueError("Model provider returned malformed JSON; no action executed.") from None
     raise RuntimeError("Model unavailable")
 
 
@@ -46,7 +50,7 @@ def validate_choice(answer, ids):
         reason = "required choice fields are missing or malformed"
     if reason:
         # Report a code owned diagnosis without echoing arbitrary provider data.
-        raise ValueError(f"Invalid TypeSafe response: {reason}; no action executed.")
+        raise ValueError(f"Invalid model choice response: {reason}; no action executed.")
     return answer
 
 
@@ -84,6 +88,7 @@ def action_space(actions):
 
 
 def choose(state, goal, history):
+    provider = decision_provider()
     elements, targets, controls = action_space(state["actions"])
     labels = {
         "CLICK": "Click an element, button, menu option, autocomplete suggestion, or calendar day.",
@@ -110,7 +115,7 @@ def choose(state, goal, history):
             "instructions": {"goal": goal, "operation": operation, "rules": [NEXT_ACTION, TARGET]},
         }
     body = {
-        "model": os.environ.get("TYPESAFE_MODEL", "jev-latest"),
+        "model": provider.model,
         "state": {
             "page": {k: state[k] for k in ("url", "title", "text")},
             "elements": elements,
@@ -121,7 +126,9 @@ def choose(state, goal, history):
         "questions": questions,
     }
     started = time.perf_counter()
-    result = post_json("https://api.typesafe.ai/v1/systemone", os.environ["TYPESAFE_API_KEY"], body)
+    result = post_json(provider.url, provider.key, body)
+    if not isinstance(result, dict) or not isinstance(result.get("answers"), dict):
+        raise ValueError("Model provider returned no valid decision answers; no action executed.")
     operation_answer = validate_choice(result["answers"].get("operation", {}), operations)
     operation = operation_answer["choice"]
     target = None
@@ -146,7 +153,8 @@ def choose(state, goal, history):
         "target_probabilities": target_answer["probabilities"] if target_answer else {},
         "target_confidence": target_answer["confidence"] if target_answer else None,
         "raw_answers": result["answers"],
-        "model": result["model"],
+        "model": result.get("model", provider.model),
+        "provider": provider.name,
         "usage": result.get("usage", {}),
         "latency_ms": round((time.perf_counter() - started) * 1000),
         "request": body,

@@ -1,10 +1,10 @@
 """Jev screening of observed professional titles before profile navigation."""
 
-import os
 import re
 import time
 from urllib.parse import urlsplit
 
+from .decision_provider import decision_provider
 from .model import post_json, validate_choice
 from .recruiting_model import parse_criteria
 
@@ -67,9 +67,7 @@ def screen_profiles(requirements, profiles):
         if any(len(profile.get(field, "")) > 12000 for field in ("label", "context", "title")):
             raise ValueError("Observed profile card text is too long for title screening.")
         seen.add(url)
-    key = os.environ.get("TYPESAFE_API_KEY", "").strip()
-    if not key:
-        raise ValueError("Configure TYPESAFE_API_KEY before screening profiles.")
+    provider = decision_provider()
     questions, observed, excerpts_by_profile = {}, {}, {}
     for index, profile in enumerate(profiles, 1):
         candidate = f"p{index}"
@@ -92,13 +90,13 @@ def screen_profiles(requirements, profiles):
                             "Choose none if no excerpt establishes their relevant role.",
             },
         }
-    body = {"model": os.environ.get("TYPESAFE_MODEL", "jev-latest"),
+    body = {"model": provider.model,
             "state": {"observed_profiles": observed}, "questions": questions}
     started = time.perf_counter()
-    result = post_json("https://api.typesafe.ai/v1/systemone", key, body)
+    result = post_json(provider.url, provider.key, body)
     answers = result.get("answers") if isinstance(result, dict) else None
     if not isinstance(answers, dict):
-        raise ValueError("Jev returned no valid profile screening answers.")
+        raise ValueError("Model provider returned no valid profile screening answers.")
     model = result.get("model", body["model"])
     screened = {}
     for index, profile in enumerate(profiles, 1):
@@ -114,5 +112,5 @@ def screen_profiles(requirements, profiles):
         screened[profile["profile_url"]] = {
             "status": status, "quote": quote, "confidence": answer["confidence"], "model": model,
         }
-    return screened, {"model": model, "usage": result.get("usage", {}),
+    return screened, {"provider": provider.name, "model": model, "usage": result.get("usage", {}),
                       "latency_ms": round((time.perf_counter() - started) * 1000)}

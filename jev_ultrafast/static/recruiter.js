@@ -86,7 +86,7 @@ function renderCandidates() {
     return `<article class="candidate-card"><div class="candidate-top"><div class="candidate-identity"><span class="avatar" aria-hidden="true">${escape(initials)}</span><div><h3 class="candidate-name">${url ? `<a href="${escape(url)}" target="_blank" rel="noopener noreferrer">${escape(name)} <span aria-hidden="true">↗</span></a>` : escape(name)}</h3><p class="candidate-source">${escape(candidate.discovered_from || "From discovery")}${candidate.sidebar_section_index ? ` · Sidebar section ${escape(candidate.sidebar_section_index)}: ${escape(candidate.sidebar_section_title || "Profile recommendations")}` : ""}</p></div></div><span class="badge ${recommendation === "potential_match" ? "match" : recommendation === "not_a_match" ? "unmatched" : ""}">${labels[recommendation] || screeningLabel}</span></div>
     <details class="listing-details"><summary>details &amp; evidence</summary>
     ${url ? `<a class="profile-link" href="${escape(url)}" target="_blank" rel="noopener noreferrer">${escape(url)} ↗</a>` : ""}
-    ${assessment?.model ? `<p class="assessment-model">Assessed by Jev · ${escape(assessment.model)}${Number.isFinite(assessment.latency_ms) ? ` · ${escape(assessment.latency_ms)} ms` : ""}</p>` : ""}
+    ${assessment?.model ? `<p class="assessment-model">Assessed by ${escape(assessment.provider === "morph" ? "Morph" : "Jev")} · ${escape(assessment.model)}${Number.isFinite(assessment.latency_ms) ? ` · ${escape(assessment.latency_ms)} ms` : ""}</p>` : ""}
     <p class="candidate-summary">${escape(assessment?.summary || (skipped ? "Link saved without opening the profile. The visible title did not establish relevance." : "Profile link saved. Evidence will appear after the profile is visited."))}</p>
     ${candidate.relevance?.quote ? `<p class="candidate-summary">Title evidence: ${escape(candidate.relevance.quote)}</p>` : ""}
     <div class="criteria">${criteria.map((item) => `<div class="criterion"><span class="criterion-status ${item.status === "unknown" ? "unknown" : item.status === "not_met" ? "unmet" : ""}">${item.status === "met" ? "✓ Evidence found" : item.status === "not_met" ? "Does not meet" : "? Not confirmed"}</span><div><strong>${escape(item.criterion)}</strong>${item.quote ? `<blockquote>“${escape(item.quote)}”</blockquote>` : ""}</div></div>`).join("")}</div>
@@ -114,6 +114,7 @@ function renderDecision() {
 function render() {
   if (!state) return;
   const counts = state.counts || {};
+  $("provider-caption").textContent = state.provider_label ? `recruiting with ${state.provider_label}` : "recruiting with model choices";
   $("discovered-count").textContent = counts.discovered || 0;
   $("reviewed-count").textContent = counts.reviewed || 0;
   $("qualified-count").textContent = `${counts.qualified || 0} / ${state.target_matches || $("target-matches").value}`;

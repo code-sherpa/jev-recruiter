@@ -87,7 +87,7 @@ def test_status_without_support_becomes_unknown(provider):
 def test_fabricated_evidence_target_fails_validation(provider):
     _, selections = provider
     selections.update(c1_status="met", c1_evidence="e999")
-    with pytest.raises(ValueError, match="Invalid TypeSafe response"):
+    with pytest.raises(ValueError, match="Invalid model choice response"):
         recruiting_model.assess(["Event experience"], ["Observed text"], "observed profile")
 
 
