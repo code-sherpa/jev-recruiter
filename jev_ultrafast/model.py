@@ -1,6 +1,7 @@
 """TypeSafe makes choices; an optional small OpenAI-compatible model writes field values."""
 
 import json
+import logging
 import math
 import os
 import time
@@ -11,12 +12,21 @@ from .decision_provider import decision_provider
 from .questions import NEXT_ACTION, TARGET, TEXT_VALUE
 
 CLIENT = httpx.Client(http2=True, timeout=25)
+LOGGER = logging.getLogger(__name__)
 
 
 def post_json(url, key, body):
     for attempt in range(3):
         try:
             response = CLIENT.post(url, json=body, headers={"Authorization": f"Bearer {key}"})
+        except httpx.TimeoutException as exc:
+            if attempt == 2:
+                raise RuntimeError("Model connection failed; no action executed.") from None
+            # Only repeat the unchanged model request. Browser mutations live outside this function.
+            LOGGER.warning("Model request timed out (%s); retrying attempt %s of 3",
+                           type(exc).__name__, attempt + 2)
+            time.sleep(0.5 * 2**attempt)
+            continue
         except httpx.HTTPError:
             raise RuntimeError("Model connection failed; no action executed.") from None
         if response.status_code in {429, 529, 503} and attempt < 2:

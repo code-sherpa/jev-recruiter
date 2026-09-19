@@ -55,6 +55,8 @@ MORPH_API_URL=https://api.morphllm.com/v1/singleshot
 
 TypeSafe requests go to `https://api.typesafe.ai/v1/systemone`. Morph uses the configured `MORPH_API_URL`, defaulting to its documented singleshot endpoint above. Both receive the same indexed `state` and `questions`. Only the endpoint, credential, and configured model change. Invalid responses stop the run rather than switching providers. Morph availability depends on that endpoint being deployed and accessible with your key. Restart the server after changing provider settings. Saved runs identify the configured provider and model.
 
+Model timeouts and temporary HTTP 429, 503, or 529 responses share a limit of three attempts with short backoff. Each attempt sends the same model input. Browser actions are never retried, and stale page guards still apply before execution. The model call counter counts logical decisions, so transport retries can make the number of HTTP requests higher.
+
 Connect Chrome and start the app:
 
 ```bash
