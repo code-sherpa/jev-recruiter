@@ -1,5 +1,6 @@
 import json
 
+import httpx
 import pytest
 
 from jev_ultrafast import recruiter
@@ -283,6 +284,32 @@ def test_discovered_link_survives_choose_failure(prepared, monkeypatch):
     saved = json.loads(prepared.path.read_text())
     assert saved['discoveries'][0]['profile_url'] == 'https://www.linkedin.com/in/alice/'
     assert len(FakeBrowser.instances) == 1
+
+
+def test_failure_diagnostics_keep_suppressed_context_without_private_values(prepared, monkeypatch, caplog):
+    private = 'private-provider-body-and-secret-key'
+    calls = []
+
+    def fail(*args):
+        calls.append(1)
+        try:
+            request = httpx.Request('POST', 'https://private.example', headers={'Authorization': private})
+            raise httpx.ConnectError(private, request=request)
+        except httpx.HTTPError:
+            raise RuntimeError(private) from None
+
+    monkeypatch.setattr(recruiter, 'choose', fail)
+    prepared.command('tick')
+    state = prepared.command('tick')
+    prepared.command('tick')
+    assert state['status'] == 'blocked'
+    assert len(calls) == 1
+    diagnostics = json.loads(caplog.records[-1].getMessage().split(': ', 1)[1])
+    assert [item['type'] for item in diagnostics] == ['builtins.RuntimeError', 'httpx.ConnectError']
+    assert all(item['frames'] for item in diagnostics)
+    assert any(frame['function'] == 'fail' for item in diagnostics for frame in item['frames'])
+    assert private not in caplog.text + prepared.path.read_text()
+    assert 'private.example' not in caplog.text
 
 
 def test_waits_are_capped_at_three(prepared, monkeypatch):

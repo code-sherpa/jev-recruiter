@@ -2,9 +2,11 @@
 
 import copy
 import json
+import logging
 import os
 import re
 import time
+import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlencode, urlsplit
@@ -15,6 +17,28 @@ from .decision_provider import decision_provider
 from .discovery_model import screen_profiles
 from .model import choose
 from .recruiting_model import assess, parse_criteria
+
+LOGGER = logging.getLogger(__name__)
+
+
+def log_failure(exc):
+    """Retain server diagnostics without exception values, requests, or credentials."""
+    chain, seen = [], set()
+    current = exc
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        frames = [
+            {"file": Path(frame.f_code.co_filename).name, "function": frame.f_code.co_name, "line": line}
+            for frame, line in traceback.walk_tb(current.__traceback__)
+        ]
+        entry = {"type": f"{type(current).__module__}.{type(current).__name__}", "frames": frames}
+        status = getattr(getattr(current, "response", None), "status_code", None)
+        if type(status) is int and 100 <= status <= 599:
+            entry["http_status"] = status
+        chain.append(entry)
+        # `raise ... from None` hides display, but the original context is useful.
+        current = current.__cause__ or current.__context__
+    LOGGER.error("Recruiting failure diagnostics: %s", json.dumps(chain))
 
 SEARCH_URL = "https://www.linkedin.com/search/results/people/"
 
@@ -243,6 +267,7 @@ class Recruiter:
                 self.message = "Page changed before input. Ready for a fresh Jev decision."
                 self._log("Discarded stale Jev decision before execution")
             except Exception as exc:
+                log_failure(exc)
                 self.status = "blocked"
                 # Do not expose provider responses or credentials through persisted errors.
                 self.error = (str(exc) if isinstance(exc, ValueError) else
