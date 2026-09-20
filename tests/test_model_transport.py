@@ -30,7 +30,7 @@ def test_timeout_retries_identical_request_then_returns_success(monkeypatch, cap
     assert 'private-key' not in caplog.text
 
 
-def test_exhausted_timeouts_stop_after_three_attempts(monkeypatch):
+def test_exhausted_timeouts_stop_after_ten_attempts(monkeypatch):
     requests, sleeps = [], []
 
     def handle(request):
@@ -42,8 +42,8 @@ def test_exhausted_timeouts_stop_after_three_attempts(monkeypatch):
         monkeypatch.setattr(model, 'CLIENT', client)
         with pytest.raises(RuntimeError, match='Model connection failed; no action executed') as error:
             model.post_json('https://provider.example/choices', 'private-key', {'state': 'observed'})
-    assert len(requests) == 3
-    assert sleeps == [0.5, 1.0]
+    assert len(requests) == 10
+    assert sleeps == [0.5, 1.0, 2.0, 4.0, 8.0, 16.0, 20.0, 20.0, 20.0]
     assert isinstance(error.value.__context__, httpx.ReadTimeout)
     assert 'private provider failure' not in str(error.value)
 
@@ -62,5 +62,5 @@ def test_http_status_and_timeout_share_one_attempt_budget(monkeypatch):
         monkeypatch.setattr(model, 'CLIENT', client)
         with pytest.raises(RuntimeError, match='HTTP 503'):
             model.post_json('https://provider.example/choices', 'private-key', {'state': 'observed'})
-    assert len(requests) == 3
-    assert sleeps == [0.5, 1.0]
+    assert len(requests) == 10
+    assert sleeps == [0.5, 1.0, 2.0, 4.0, 8.0, 16.0, 20.0, 20.0, 20.0]

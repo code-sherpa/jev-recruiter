@@ -14,26 +14,40 @@ from .questions import NEXT_ACTION, TARGET, TEXT_VALUE
 CLIENT = httpx.Client(http2=True, timeout=25)
 LOGGER = logging.getLogger(__name__)
 
+MAX_ATTEMPTS = 10
+BASE_DELAY_SECONDS = 0.5
+MAX_DELAY_SECONDS = 20
+RETRYABLE_STATUSES = {429, 500, 502, 503, 504, 529}
+
 
 def post_json(url, key, body):
-    for attempt in range(3):
+    # Only the unchanged model request is repeated here. Browser mutations live outside this function.
+    for attempt in range(MAX_ATTEMPTS):
+        last_attempt = attempt == MAX_ATTEMPTS - 1
         try:
             response = CLIENT.post(url, json=body, headers={"Authorization": f"Bearer {key}"})
-        except httpx.TimeoutException as exc:
-            if attempt == 2:
+        except httpx.HTTPError as exc:
+            if last_attempt:
+                LOGGER.error("Model request failed after %s attempts (%s); giving up",
+                             MAX_ATTEMPTS, type(exc).__name__)
                 raise RuntimeError("Model connection failed; no action executed.") from None
-            # Only repeat the unchanged model request. Browser mutations live outside this function.
-            LOGGER.warning("Model request timed out (%s); retrying attempt %s of 3",
-                           type(exc).__name__, attempt + 2)
-            time.sleep(0.5 * 2**attempt)
+            delay = min(BASE_DELAY_SECONDS * 2**attempt, MAX_DELAY_SECONDS)
+            LOGGER.warning("Model request error (%s) on attempt %s of %s; retrying in %.1fs",
+                           type(exc).__name__, attempt + 1, MAX_ATTEMPTS, delay)
+            time.sleep(delay)
             continue
-        except httpx.HTTPError:
-            raise RuntimeError("Model connection failed; no action executed.") from None
-        if response.status_code in {429, 529, 503} and attempt < 2:
-            time.sleep(0.5 * 2**attempt)
+        if response.status_code in RETRYABLE_STATUSES and not last_attempt:
+            delay = min(BASE_DELAY_SECONDS * 2**attempt, MAX_DELAY_SECONDS)
+            LOGGER.warning("Model provider returned HTTP %s on attempt %s of %s; retrying in %.1fs",
+                           response.status_code, attempt + 1, MAX_ATTEMPTS, delay)
+            time.sleep(delay)
             continue
         if response.is_error:
+            LOGGER.error("Model provider returned HTTP %s after %s attempt(s); no action executed",
+                         response.status_code, attempt + 1)
             raise RuntimeError(f"Model provider returned HTTP {response.status_code}; no action executed.")
+        if attempt:
+            LOGGER.info("Model request succeeded on attempt %s of %s", attempt + 1, MAX_ATTEMPTS)
         try:
             return response.json()
         except ValueError:
